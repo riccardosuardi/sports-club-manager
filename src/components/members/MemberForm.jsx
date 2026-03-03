@@ -110,7 +110,7 @@ export default function MemberForm({ member, members = [], onSaved, onCancel }) 
           </select>
         </div>
         <div>
-          <label className={labelClass}>Tipologia Socio</label>
+          <label className={labelClass}>Tipologia Atleta</label>
           <select value={form.member_type || ''} onChange={(e) => set('member_type', e.target.value)} className={inputClass}>
             <option value="">--</option>
             <option value="giovane">Giovane</option>
@@ -133,7 +133,7 @@ export default function MemberForm({ member, members = [], onSaved, onCancel }) 
             onChange={(e) => set('is_minor', e.target.checked)}
             className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
           />
-          <span className="font-medium text-gray-700">Socio minorenne</span>
+          <span className="font-medium text-gray-700">Atleta minorenne</span>
         </label>
         {form.is_minor && (
           <div className="mt-3">
@@ -227,7 +227,7 @@ export default function MemberForm({ member, members = [], onSaved, onCancel }) 
           Annulla
         </button>
         <button type="submit" disabled={saving} className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50">
-          {saving ? 'Salvataggio...' : member ? 'Salva Modifiche' : 'Crea Socio'}
+          {saving ? 'Salvataggio...' : member ? 'Salva Modifiche' : 'Crea Atleta'}
         </button>
       </div>
     </form>

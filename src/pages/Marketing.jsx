@@ -20,6 +20,7 @@ export default function Marketing() {
   const [editing, setEditing] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [convertTarget, setConvertTarget] = useState(null)
+  const [showEmail, setShowEmail] = useState(false)
 
   useEffect(() => { fetchContacts() }, [])
 
@@ -73,12 +74,20 @@ export default function Marketing() {
             {stats.total} contatti | {stats.new} nuovi | {stats.interested} interessati | {stats.converted} convertiti
           </p>
         </div>
-        <button
-          onClick={() => { setEditing(null); setShowForm(true) }}
-          className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-700"
-        >
-          <Plus size={18} /> Nuovo Contatto
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowEmail(true)}
+            className="inline-flex items-center gap-2 rounded-lg border border-primary-600 px-4 py-2.5 text-sm font-medium text-primary-600 hover:bg-primary-50"
+          >
+            <Mail size={18} /> Invia Email
+          </button>
+          <button
+            onClick={() => { setEditing(null); setShowForm(true) }}
+            className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-700"
+          >
+            <Plus size={18} /> Nuovo Contatto
+          </button>
+        </div>
       </div>
 
       {/* Pipeline visuale */}
@@ -173,7 +182,7 @@ export default function Marketing() {
                   <td className="whitespace-nowrap px-4 py-3 text-right">
                     <div className="flex justify-end gap-2">
                       {contact.contact_status !== 'convertito' && (
-                        <button onClick={() => setConvertTarget(contact)} className="text-xs text-green-600 hover:text-green-700" title="Converti a socio">
+                        <button onClick={() => setConvertTarget(contact)} className="text-xs text-green-600 hover:text-green-700" title="Converti a atleta">
                           <UserPlus size={16} />
                         </button>
                       )}
@@ -187,6 +196,10 @@ export default function Marketing() {
           </table>
         </div>
       )}
+
+      <Modal open={showEmail} onClose={() => setShowEmail(false)} title="Invia Comunicazione Email" size="lg">
+        <EmailCompose contacts={filtered.filter(c => c.email)} onClose={() => setShowEmail(false)} />
+      </Modal>
 
       <Modal open={showForm} onClose={() => setShowForm(false)} title={editing ? 'Modifica Contatto' : 'Nuovo Contatto'} size="md">
         <ContactForm contact={editing} onSaved={() => { setShowForm(false); fetchContacts() }} onCancel={() => setShowForm(false)} />
@@ -206,8 +219,8 @@ export default function Marketing() {
         open={!!convertTarget}
         onClose={() => setConvertTarget(null)}
         onConfirm={() => handleConvert(convertTarget)}
-        title="Converti a Socio"
-        message={`Vuoi creare un nuovo socio da ${convertTarget?.first_name} ${convertTarget?.last_name}? I dati verranno copiati nella scheda socio.`}
+        title="Converti a Atleta"
+        message={`Vuoi convertire ${convertTarget?.first_name} ${convertTarget?.last_name} in atleta? I dati verranno copiati nella scheda atleta.`}
         confirmLabel="Converti"
       />
     </div>
@@ -310,5 +323,106 @@ function ContactForm({ contact, onSaved, onCancel }) {
         </button>
       </div>
     </form>
+  )
+}
+
+function EmailCompose({ contacts, onClose }) {
+  const [selected, setSelected] = useState(new Set(contacts.map(c => c.id)))
+  const [subject, setSubject] = useState('')
+  const [body, setBody] = useState('')
+
+  function toggleContact(id) {
+    setSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function toggleAll() {
+    if (selected.size === contacts.length) {
+      setSelected(new Set())
+    } else {
+      setSelected(new Set(contacts.map(c => c.id)))
+    }
+  }
+
+  function handleSend() {
+    const recipients = contacts.filter(c => selected.has(c.id)).map(c => c.email).filter(Boolean)
+    if (recipients.length === 0) return
+    const mailto = `mailto:?bcc=${encodeURIComponent(recipients.join(','))}&subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+    window.open(mailto)
+    // Aggiorna last_contacted_at per i contatti selezionati
+    const ids = contacts.filter(c => selected.has(c.id)).map(c => c.id)
+    supabase.from('users').update({ last_contacted_at: new Date().toISOString() }).in('id', ids).then(() => {})
+    onClose()
+  }
+
+  const inputClass = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500 focus:outline-none'
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <div className="mb-1 flex items-center justify-between">
+          <label className="block text-sm font-medium text-gray-700">
+            Destinatari ({contacts.filter(c => selected.has(c.id)).length} selezionati)
+          </label>
+          <button onClick={toggleAll} className="text-xs text-primary-600 hover:text-primary-700">
+            {selected.size === contacts.length ? 'Deseleziona tutti' : 'Seleziona tutti'}
+          </button>
+        </div>
+        <div className="max-h-40 overflow-y-auto rounded-lg border border-gray-200 p-2">
+          {contacts.length === 0 ? (
+            <p className="text-sm text-gray-500 py-2 text-center">Nessun contatto con email</p>
+          ) : (
+            contacts.map(c => (
+              <label key={c.id} className="flex items-center gap-2 rounded px-2 py-1.5 hover:bg-gray-50 text-sm cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={selected.has(c.id)}
+                  onChange={() => toggleContact(c.id)}
+                  className="rounded border-gray-300 text-primary-600"
+                />
+                <span className="font-medium">{c.first_name} {c.last_name}</span>
+                <span className="text-gray-400">({c.email})</span>
+              </label>
+            ))
+          )}
+        </div>
+      </div>
+      <div>
+        <label className="mb-1 block text-sm font-medium text-gray-700">Oggetto</label>
+        <input
+          type="text"
+          value={subject}
+          onChange={(e) => setSubject(e.target.value)}
+          placeholder="Oggetto della comunicazione..."
+          className={inputClass}
+        />
+      </div>
+      <div>
+        <label className="mb-1 block text-sm font-medium text-gray-700">Messaggio</label>
+        <textarea
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+          rows={6}
+          placeholder="Scrivi il messaggio..."
+          className={inputClass}
+        />
+      </div>
+      <div className="flex justify-end gap-3 border-t pt-4">
+        <button onClick={onClose} className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+          Annulla
+        </button>
+        <button
+          onClick={handleSend}
+          disabled={selected.size === 0 || !subject}
+          className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50"
+        >
+          Apri nel client email
+        </button>
+      </div>
+    </div>
   )
 }

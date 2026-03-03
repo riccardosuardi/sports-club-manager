@@ -87,7 +87,7 @@ export default function Settings() {
                           <option value="admin">Admin</option>
                           <option value="segreteria">Segreteria</option>
                           <option value="istruttore">Istruttore</option>
-                          <option value="socio">Socio</option>
+                          <option value="socio">Atleta</option>
                         </select>
                       ) : (
                         <span className="text-xs text-gray-400">Il tuo account</span>

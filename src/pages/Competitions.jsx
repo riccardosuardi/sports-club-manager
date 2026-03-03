@@ -403,7 +403,7 @@ export default function Competitions() {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead>
                     <tr>
-                      <th className="pb-2 text-left text-xs font-medium text-gray-500">Socio</th>
+                      <th className="pb-2 text-left text-xs font-medium text-gray-500">Atleta</th>
                       <th className="pb-2 text-left text-xs font-medium text-gray-500">Tipo</th>
                       <th className="pb-2 text-left text-xs font-medium text-gray-500">Categoria</th>
                       <th className="pb-2 text-left text-xs font-medium text-gray-500">Risultato</th>
@@ -450,24 +450,24 @@ export default function Competitions() {
               </div>
             )}
 
-            {/* Iscrivi socio */}
+            {/* Iscrivi atleta */}
             {canManage && (
               <button
                 onClick={() => setShowEnrollModal(true)}
                 className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-3 py-2 text-sm font-medium text-white hover:bg-primary-700"
               >
-                <Plus size={16} /> Iscrivi Socio
+                <Plus size={16} /> Iscrivi Atleta
               </button>
             )}
           </div>
         )}
       </Modal>
 
-      {/* Modal iscrizione socio a gara */}
+      {/* Modal iscrizione atleta a gara */}
       <Modal
         open={showEnrollModal}
         onClose={() => setShowEnrollModal(false)}
-        title="Iscrivi Socio alla Gara"
+        title="Iscrivi Atleta alla Gara"
         size="sm"
       >
         <EnrollMemberForm
@@ -662,7 +662,7 @@ function CompetitionForm({ competition, onSaved, onCancel }) {
   )
 }
 
-// ---- Form iscrizione socio a gara ----
+// ---- Form iscrizione atleta a gara ----
 function EnrollMemberForm({ members, registrations, onEnroll, onCancel }) {
   const [memberId, setMemberId] = useState('')
   const [category, setCategory] = useState('')
@@ -673,13 +673,13 @@ function EnrollMemberForm({ members, registrations, onEnroll, onCancel }) {
   return (
     <div className="space-y-4">
       <div>
-        <label className="mb-1 block text-sm font-medium text-gray-700">Socio *</label>
+        <label className="mb-1 block text-sm font-medium text-gray-700">Atleta *</label>
         <select
           value={memberId}
           onChange={(e) => setMemberId(e.target.value)}
           className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500 focus:outline-none"
         >
-          <option value="">Seleziona socio...</option>
+          <option value="">Seleziona atleta...</option>
           {availableMembers.map((m) => (
             <option key={m.id} value={m.id}>
               {m.last_name} {m.first_name} {m.member_type ? `(${m.member_type})` : ''}
