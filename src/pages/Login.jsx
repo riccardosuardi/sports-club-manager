@@ -21,12 +21,19 @@ export default function Login() {
     try {
       if (isSignUp) {
         await signUp(email, password, fullName)
-        setMessage('Registrazione effettuata! Controlla la tua email per confermare.')
+        setMessage('Registrazione effettuata! Accesso in corso...')
       } else {
         await signIn(email, password)
       }
     } catch (err) {
-      setError(err.message)
+      const msg = err.message || 'Errore sconosciuto'
+      if (msg.includes('Database error saving new user')) {
+        setError('Errore database: esegui la migrazione 005_fix_handle_new_user.sql nel SQL Editor di Supabase.')
+      } else if (msg.includes('Failed to fetch')) {
+        setError('Impossibile connettersi al server. Verifica la connessione e le variabili d\'ambiente.')
+      } else {
+        setError(msg)
+      }
     } finally {
       setLoading(false)
     }
