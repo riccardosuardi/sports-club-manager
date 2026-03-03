@@ -62,4 +62,8 @@ export const STATUS_COLORS = {
   annullato: 'bg-red-100 text-red-800',
   completato: 'bg-gray-100 text-gray-800',
   ritirato: 'bg-red-100 text-red-800',
+  programmata: 'bg-blue-100 text-blue-800',
+  iscrizioni_aperte: 'bg-green-100 text-green-800',
+  iscrizioni_chiuse: 'bg-yellow-100 text-yellow-800',
+  in_corso: 'bg-orange-100 text-orange-800',
 }

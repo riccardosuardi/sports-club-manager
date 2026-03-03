@@ -7,6 +7,7 @@ import Members from './pages/Members'
 import MemberDetail from './pages/MemberDetail'
 import Courses from './pages/Courses'
 import Clothing from './pages/Clothing'
+import Competitions from './pages/Competitions'
 import Marketing from './pages/Marketing'
 import Settings from './pages/Settings'
 
@@ -55,6 +56,7 @@ function AppRoutes() {
         <Route path="/soci" element={<Members />} />
         <Route path="/soci/:id" element={<MemberDetail />} />
         <Route path="/corsi" element={<Courses />} />
+        <Route path="/gare" element={<Competitions />} />
         <Route path="/abbigliamento" element={<Clothing />} />
         <Route
           path="/marketing"
