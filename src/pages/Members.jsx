@@ -27,15 +27,16 @@ export default function Members() {
   async function fetchMembers() {
     setLoading(true)
     const { data, error } = await supabase
-      .from('members')
+      .from('persone')
       .select('*, parent:parent_id(id, first_name, last_name)')
+      .eq('is_member', true)
       .order('last_name')
     if (!error) setMembers(data || [])
     setLoading(false)
   }
 
   async function handleDelete(id) {
-    await supabase.from('members').delete().eq('id', id)
+    await supabase.from('persone').delete().eq('id', id)
     fetchMembers()
   }
 

@@ -25,34 +25,25 @@ export default function Marketing() {
 
   async function fetchContacts() {
     setLoading(true)
-    const { data } = await supabase.from('contacts').select('*').order('created_at', { ascending: false })
+    const { data } = await supabase.from('persone').select('*').eq('is_member', false).order('created_at', { ascending: false })
     setContacts(data || [])
     setLoading(false)
   }
 
   async function handleDelete(id) {
-    await supabase.from('contacts').delete().eq('id', id)
+    await supabase.from('persone').delete().eq('id', id)
     fetchContacts()
   }
 
   async function handleConvert(contact) {
-    // Crea socio dal contatto
-    const { data: member, error: memberError } = await supabase.from('members').insert({
-      first_name: contact.first_name,
-      last_name: contact.last_name,
-      email: contact.email,
-      phone: contact.phone,
-      status: 'attivo',
+    // Converti contatto a socio: basta aggiornare is_member e contact_status
+    const { error } = await supabase.from('persone').update({
+      is_member: true,
+      contact_status: 'convertito',
       membership_start: new Date().toISOString().split('T')[0],
-    }).select().single()
-
-    if (memberError) { alert(memberError.message); return }
-
-    // Aggiorna contatto come convertito
-    await supabase.from('contacts').update({
-      status: 'convertito',
-      converted_member_id: member.id,
     }).eq('id', contact.id)
+
+    if (error) { alert(error.message); return }
 
     setConvertTarget(null)
     fetchContacts()
@@ -62,15 +53,15 @@ export default function Marketing() {
     const matchesSearch = !search ||
       `${c.first_name} ${c.last_name}`.toLowerCase().includes(search.toLowerCase()) ||
       (c.email || '').toLowerCase().includes(search.toLowerCase())
-    const matchesStatus = filterStatus === 'tutti' || c.status === filterStatus
+    const matchesStatus = filterStatus === 'tutti' || c.contact_status === filterStatus
     return matchesSearch && matchesStatus
   })
 
   const stats = {
     total: contacts.length,
-    new: contacts.filter(c => c.status === 'nuovo').length,
-    interested: contacts.filter(c => c.status === 'interessato').length,
-    converted: contacts.filter(c => c.status === 'convertito').length,
+    new: contacts.filter(c => c.contact_status === 'nuovo').length,
+    interested: contacts.filter(c => c.contact_status === 'interessato').length,
+    converted: contacts.filter(c => c.contact_status === 'convertito').length,
   }
 
   return (
@@ -94,10 +85,10 @@ export default function Marketing() {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         {[
           { label: 'Nuovi', count: stats.new, color: 'bg-blue-500' },
-          { label: 'Contattati', count: contacts.filter(c => c.status === 'contattato').length, color: 'bg-purple-500' },
+          { label: 'Contattati', count: contacts.filter(c => c.contact_status === 'contattato').length, color: 'bg-purple-500' },
           { label: 'Interessati', count: stats.interested, color: 'bg-orange-500' },
           { label: 'Convertiti', count: stats.converted, color: 'bg-green-500' },
-          { label: 'Persi', count: contacts.filter(c => c.status === 'perso').length, color: 'bg-red-500' },
+          { label: 'Persi', count: contacts.filter(c => c.contact_status === 'perso').length, color: 'bg-red-500' },
         ].map((s) => (
           <div key={s.label} className="rounded-lg border border-gray-200 bg-white p-4 text-center">
             <div className={`mx-auto mb-2 h-2 w-12 rounded-full ${s.color}`} />
@@ -162,9 +153,9 @@ export default function Marketing() {
                   <td className="hidden whitespace-nowrap px-4 py-3 text-sm text-gray-600 lg:table-cell">{contact.interest || '-'}</td>
                   <td className="whitespace-nowrap px-4 py-3">
                     <select
-                      value={contact.status}
+                      value={contact.contact_status}
                       onChange={async (e) => {
-                        await supabase.from('contacts').update({ status: e.target.value }).eq('id', contact.id)
+                        await supabase.from('persone').update({ contact_status: e.target.value }).eq('id', contact.id)
                         fetchContacts()
                       }}
                       className="rounded border border-gray-300 px-2 py-1 text-xs"
@@ -181,7 +172,7 @@ export default function Marketing() {
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-right">
                     <div className="flex justify-end gap-2">
-                      {contact.status !== 'convertito' && (
+                      {contact.contact_status !== 'convertito' && (
                         <button onClick={() => setConvertTarget(contact)} className="text-xs text-green-600 hover:text-green-700" title="Converti a socio">
                           <UserPlus size={16} />
                         </button>
@@ -231,7 +222,7 @@ function ContactForm({ contact, onSaved, onCancel }) {
     phone: contact?.phone || '',
     source: contact?.source || '',
     interest: contact?.interest || '',
-    status: contact?.status || 'nuovo',
+    contact_status: contact?.contact_status || 'nuovo',
     notes: contact?.notes || '',
   })
   const [error, setError] = useState('')
@@ -251,10 +242,12 @@ function ContactForm({ contact, onSaved, onCancel }) {
 
     try {
       if (contact?.id) {
-        const { error } = await supabase.from('contacts').update(payload).eq('id', contact.id)
+        const { error } = await supabase.from('persone').update(payload).eq('id', contact.id)
         if (error) throw error
       } else {
-        const { error } = await supabase.from('contacts').insert(payload)
+        payload.is_member = false
+        payload.status = 'attivo'
+        const { error } = await supabase.from('persone').insert(payload)
         if (error) throw error
       }
       onSaved()
@@ -297,7 +290,7 @@ function ContactForm({ contact, onSaved, onCancel }) {
         </div>
         <div>
           <label className="mb-1 block text-sm font-medium text-gray-700">Stato</label>
-          <select value={form.status} onChange={(e) => set('status', e.target.value)} className={inputClass}>
+          <select value={form.contact_status} onChange={(e) => set('contact_status', e.target.value)} className={inputClass}>
             <option value="nuovo">Nuovo</option>
             <option value="contattato">Contattato</option>
             <option value="interessato">Interessato</option>
