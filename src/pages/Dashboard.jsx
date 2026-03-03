@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Users, GraduationCap, Shirt, Megaphone, AlertTriangle, TrendingUp, UserPlus, Calendar } from 'lucide-react'
+import { Users, GraduationCap, AlertTriangle, Megaphone, Calendar, Cake } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { formatDate, isCertificateExpired, isCertificateExpiringSoon, getFullName } from '../lib/utils'
+import { formatDate, isCertificateExpired, isCertificateExpiringSoon, getFullName, calculateAge } from '../lib/utils'
 import StatCard from '../components/ui/StatCard'
 import Badge from '../components/ui/Badge'
 
@@ -13,6 +13,7 @@ export default function Dashboard() {
   const [expiringCerts, setExpiringCerts] = useState([])
   const [pendingOrders, setPendingOrders] = useState([])
   const [upcomingCompetitions, setUpcomingCompetitions] = useState([])
+  const [todayBirthdays, setTodayBirthdays] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => { fetchDashboard() }, [])
@@ -27,10 +28,10 @@ export default function Dashboard() {
       ordersRes,
       competitionsRes,
     ] = await Promise.all([
-      supabase.from('members').select('*'),
+      supabase.from('users').select('*').eq('is_member', true),
       supabase.from('courses').select('id, is_active'),
       supabase.from('enrollments').select('id, status'),
-      supabase.from('contacts').select('id, status'),
+      supabase.from('users').select('id, contact_status').eq('is_member', false),
       supabase.from('clothing_orders').select('*, member:member_id(first_name, last_name), item:item_id(name)').in('status', ['richiesto', 'ordinato']).order('ordered_at', { ascending: false }).limit(5),
       supabase.from('competitions').select('id, name, competition_date, status, location, city, sport').gte('competition_date', new Date().toISOString().split('T')[0]).order('competition_date').limit(5),
     ])
@@ -46,22 +47,32 @@ export default function Dashboard() {
       minors: members.filter(m => m.is_minor).length,
       activeCourses: courses.filter(c => c.is_active).length,
       activeEnrollments: enrollments.filter(e => e.status === 'attivo').length,
-      newContacts: contacts.filter(c => c.status === 'nuovo').length,
+      newContacts: contacts.filter(c => c.contact_status === 'nuovo').length,
       expiredCerts: members.filter(m => isCertificateExpired(m.medical_certificate_expiry)).length,
       expiringSoon: members.filter(m => isCertificateExpiringSoon(m.medical_certificate_expiry)).length,
     })
 
-    // Ultimi 5 soci aggiunti
     setRecentMembers(
       [...members].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 5)
     )
 
-    // Certificati in scadenza/scaduti
     setExpiringCerts(
       members
         .filter(m => isCertificateExpired(m.medical_certificate_expiry) || isCertificateExpiringSoon(m.medical_certificate_expiry))
         .sort((a, b) => new Date(a.medical_certificate_expiry) - new Date(b.medical_certificate_expiry))
         .slice(0, 5)
+    )
+
+    // Compleanni di oggi
+    const today = new Date()
+    const todayMonth = today.getMonth() + 1
+    const todayDay = today.getDate()
+    setTodayBirthdays(
+      members.filter(m => {
+        if (!m.date_of_birth) return false
+        const [, month, day] = m.date_of_birth.split('-').map(Number)
+        return month === todayMonth && day === todayDay
+      })
     )
 
     setPendingOrders(ordersRes.data || [])
@@ -78,27 +89,53 @@ export default function Dashboard() {
         <p className="text-sm text-gray-500">Panoramica dell'associazione sportiva</p>
       </div>
 
+      {/* Compleanni di oggi */}
+      {todayBirthdays.length > 0 && (
+        <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4">
+          <div className="mb-3 flex items-center gap-2">
+            <Cake className="text-yellow-600" size={20} />
+            <h3 className="text-sm font-semibold text-yellow-800">
+              Compleanni di oggi ({todayBirthdays.length})
+            </h3>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            {todayBirthdays.map(m => (
+              <button
+                key={m.id}
+                onClick={() => navigate(`/atleti/${m.id}`)}
+                className="flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm shadow-sm hover:shadow"
+              >
+                <span className="font-medium text-gray-900">{getFullName(m)}</span>
+                {m.date_of_birth && (
+                  <span className="text-xs text-gray-500">{calculateAge(m.date_of_birth)} anni</span>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Statistiche */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard icon={Users} label="Soci Attivi" value={stats.activeMembers} subtext={`${stats.totalMembers} totali, ${stats.minors} minori`} color="primary" />
+        <StatCard icon={Users} label="Atleti Attivi" value={stats.activeMembers} subtext={`${stats.totalMembers} totali, ${stats.minors} minori`} color="primary" />
         <StatCard icon={GraduationCap} label="Corsi Attivi" value={stats.activeCourses} subtext={`${stats.activeEnrollments} iscrizioni attive`} color="green" />
         <StatCard icon={AlertTriangle} label="Certificati Scaduti" value={stats.expiredCerts} subtext={`${stats.expiringSoon} in scadenza`} color="red" />
         <StatCard icon={Megaphone} label="Nuovi Contatti" value={stats.newContacts} color="purple" />
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* Ultimi soci */}
+        {/* Ultimi atleti */}
         <div className="rounded-lg border border-gray-200 bg-white p-6">
           <div className="mb-4 flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-gray-900">Ultimi Soci Aggiunti</h3>
-            <button onClick={() => navigate('/soci')} className="text-sm text-primary-600 hover:text-primary-700">Vedi tutti</button>
+            <h3 className="text-lg font-semibold text-gray-900">Ultimi Atleti Aggiunti</h3>
+            <button onClick={() => navigate('/atleti')} className="text-sm text-primary-600 hover:text-primary-700">Vedi tutti</button>
           </div>
           {recentMembers.length === 0 ? (
-            <p className="text-sm text-gray-500">Nessun socio ancora</p>
+            <p className="text-sm text-gray-500">Nessun atleta ancora</p>
           ) : (
             <div className="space-y-3">
               {recentMembers.map(m => (
-                <div key={m.id} className="flex items-center justify-between rounded-lg border border-gray-100 p-3 hover:bg-gray-50 cursor-pointer" onClick={() => navigate(`/soci/${m.id}`)}>
+                <div key={m.id} className="flex items-center justify-between rounded-lg border border-gray-100 p-3 hover:bg-gray-50 cursor-pointer" onClick={() => navigate(`/atleti/${m.id}`)}>
                   <div className="flex items-center gap-3">
                     <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary-100 text-sm font-medium text-primary-700">
                       {m.first_name[0]}{m.last_name[0]}
@@ -119,7 +156,7 @@ export default function Dashboard() {
         <div className="rounded-lg border border-gray-200 bg-white p-6">
           <div className="mb-4 flex items-center justify-between">
             <h3 className="text-lg font-semibold text-gray-900">Certificati Medici</h3>
-            <button onClick={() => navigate('/soci')} className="text-sm text-primary-600 hover:text-primary-700">Gestisci</button>
+            <button onClick={() => navigate('/atleti')} className="text-sm text-primary-600 hover:text-primary-700">Gestisci</button>
           </div>
           {expiringCerts.length === 0 ? (
             <p className="text-sm text-green-600">Tutti i certificati sono in regola</p>
@@ -188,7 +225,7 @@ export default function Dashboard() {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead>
                   <tr>
-                    <th className="pb-2 text-left text-xs font-medium text-gray-500">Socio</th>
+                    <th className="pb-2 text-left text-xs font-medium text-gray-500">Atleta</th>
                     <th className="pb-2 text-left text-xs font-medium text-gray-500">Articolo</th>
                     <th className="pb-2 text-left text-xs font-medium text-gray-500">Stato</th>
                     <th className="pb-2 text-left text-xs font-medium text-gray-500">Data</th>

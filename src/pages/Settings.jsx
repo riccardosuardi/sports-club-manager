@@ -1,27 +1,32 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
+import { getFullName } from '../lib/utils'
 import Badge from '../components/ui/Badge'
 
 export default function Settings() {
   const { profile } = useAuth()
-  const [profiles, setProfiles] = useState([])
+  const [authUsers, setAuthUsers] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetchProfiles()
+    fetchAuthUsers()
   }, [])
 
-  async function fetchProfiles() {
+  async function fetchAuthUsers() {
     setLoading(true)
-    const { data } = await supabase.from('profiles').select('*').order('full_name')
-    setProfiles(data || [])
+    const { data } = await supabase
+      .from('users')
+      .select('*')
+      .not('auth_id', 'is', null)
+      .order('first_name')
+    setAuthUsers(data || [])
     setLoading(false)
   }
 
   async function handleRoleChange(userId, newRole) {
-    await supabase.from('profiles').update({ role: newRole }).eq('id', userId)
-    fetchProfiles()
+    await supabase.from('users').update({ role: newRole }).eq('id', userId)
+    fetchAuthUsers()
   }
 
   return (
@@ -67,22 +72,22 @@ export default function Settings() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {profiles.map((p) => (
-                  <tr key={p.id}>
-                    <td className="py-3 text-sm font-medium text-gray-900">{p.full_name}</td>
-                    <td className="py-3 text-sm text-gray-600">{p.email}</td>
-                    <td className="py-3"><Badge status={p.role === 'admin' ? 'attivo' : 'nuovo'}>{p.role}</Badge></td>
+                {authUsers.map((u) => (
+                  <tr key={u.id}>
+                    <td className="py-3 text-sm font-medium text-gray-900">{getFullName(u)}</td>
+                    <td className="py-3 text-sm text-gray-600">{u.email}</td>
+                    <td className="py-3"><Badge status={u.role === 'admin' ? 'attivo' : 'nuovo'}>{u.role}</Badge></td>
                     <td className="py-3">
-                      {p.id !== profile?.id ? (
+                      {u.auth_id !== profile?.auth_id ? (
                         <select
-                          value={p.role}
-                          onChange={(e) => handleRoleChange(p.id, e.target.value)}
+                          value={u.role}
+                          onChange={(e) => handleRoleChange(u.id, e.target.value)}
                           className="rounded border border-gray-300 px-2 py-1 text-xs"
                         >
                           <option value="admin">Admin</option>
                           <option value="segreteria">Segreteria</option>
                           <option value="istruttore">Istruttore</option>
-                          <option value="socio">Socio</option>
+                          <option value="socio">Atleta</option>
                         </select>
                       ) : (
                         <span className="text-xs text-gray-400">Il tuo account</span>

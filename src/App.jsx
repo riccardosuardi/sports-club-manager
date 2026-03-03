@@ -10,6 +10,7 @@ import Clothing from './pages/Clothing'
 import Competitions from './pages/Competitions'
 import Marketing from './pages/Marketing'
 import Settings from './pages/Settings'
+import YouthActivities from './pages/YouthActivities'
 
 function ProtectedRoute({ children, roles }) {
   const { user, profile, loading, hasRole } = useAuth()
@@ -53,8 +54,9 @@ function AppRoutes() {
         }
       >
         <Route path="/" element={<Dashboard />} />
-        <Route path="/soci" element={<Members />} />
-        <Route path="/soci/:id" element={<MemberDetail />} />
+        <Route path="/atleti" element={<Members />} />
+        <Route path="/atleti/:id" element={<MemberDetail />} />
+        <Route path="/attivita-giovanile" element={<YouthActivities />} />
         <Route path="/corsi" element={<Courses />} />
         <Route path="/gare" element={<Competitions />} />
         <Route path="/abbigliamento" element={<Clothing />} />

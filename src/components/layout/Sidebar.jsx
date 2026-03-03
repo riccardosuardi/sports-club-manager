@@ -8,13 +8,15 @@ import {
   Settings,
   Trophy,
   Calendar,
+  Baby,
   X,
 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 
 const navigation = [
   { name: 'Dashboard', to: '/', icon: LayoutDashboard },
-  { name: 'Soci', to: '/soci', icon: Users },
+  { name: 'Atleti', to: '/atleti', icon: Users },
+  { name: 'Attività Giovanile', to: '/attivita-giovanile', icon: Baby },
   { name: 'Corsi', to: '/corsi', icon: GraduationCap },
   { name: 'Gare', to: '/gare', icon: Calendar },
   { name: 'Abbigliamento', to: '/abbigliamento', icon: Shirt },

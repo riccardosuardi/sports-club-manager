@@ -27,15 +27,16 @@ export default function Members() {
   async function fetchMembers() {
     setLoading(true)
     const { data, error } = await supabase
-      .from('members')
+      .from('users')
       .select('*, parent:parent_id(id, first_name, last_name)')
+      .eq('is_member', true)
       .order('last_name')
     if (!error) setMembers(data || [])
     setLoading(false)
   }
 
   async function handleDelete(id) {
-    await supabase.from('members').delete().eq('id', id)
+    await supabase.from('users').delete().eq('id', id)
     fetchMembers()
   }
 
@@ -60,14 +61,14 @@ export default function Members() {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Soci</h1>
-          <p className="text-sm text-gray-500">{stats.total} soci registrati, {stats.active} attivi</p>
+          <h1 className="text-2xl font-bold text-gray-900">Atleti</h1>
+          <p className="text-sm text-gray-500">{stats.total} atleti registrati, {stats.active} attivi</p>
         </div>
         <button
           onClick={() => { setEditingMember(null); setShowForm(true) }}
           className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-700"
         >
-          <Plus size={18} /> Nuovo Socio
+          <Plus size={18} /> Nuovo Atleta
         </button>
       </div>
 
@@ -117,15 +118,15 @@ export default function Members() {
       ) : filtered.length === 0 ? (
         <EmptyState
           icon={Users}
-          title="Nessun socio trovato"
-          description={search ? 'Prova con una ricerca diversa' : 'Aggiungi il primo socio'}
+          title="Nessun atleta trovato"
+          description={search ? 'Prova con una ricerca diversa' : 'Aggiungi il primo atleta'}
           action={
             !search && (
               <button
                 onClick={() => { setEditingMember(null); setShowForm(true) }}
                 className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700"
               >
-                <Plus size={16} /> Aggiungi Socio
+                <Plus size={16} /> Aggiungi Atleta
               </button>
             )
           }
@@ -138,7 +139,7 @@ export default function Members() {
                 <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Nome</th>
                 <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Tessera</th>
                 <th className="hidden px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 md:table-cell">Tipo</th>
-                <th className="hidden px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 md:table-cell">Et&agrave;</th>
+                <th className="hidden px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 md:table-cell">Età</th>
                 <th className="hidden px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 lg:table-cell">Genitore</th>
                 <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Stato</th>
                 <th className="hidden px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 md:table-cell">Cert. Medico</th>
@@ -188,7 +189,7 @@ export default function Members() {
                     <td className="whitespace-nowrap px-4 py-3 text-right">
                       <div className="flex justify-end gap-2">
                         <button
-                          onClick={() => navigate(`/soci/${member.id}`)}
+                          onClick={() => navigate(`/atleti/${member.id}`)}
                           className="text-sm text-primary-600 hover:text-primary-700"
                         >
                           Dettagli
@@ -219,7 +220,7 @@ export default function Members() {
       <Modal
         open={showForm}
         onClose={() => setShowForm(false)}
-        title={editingMember ? 'Modifica Socio' : 'Nuovo Socio'}
+        title={editingMember ? 'Modifica Atleta' : 'Nuovo Atleta'}
         size="lg"
       >
         <MemberForm
@@ -235,7 +236,7 @@ export default function Members() {
         open={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
         onConfirm={() => handleDelete(deleteTarget?.id)}
-        title="Elimina Socio"
+        title="Elimina Atleta"
         message={`Sei sicuro di voler eliminare ${deleteTarget ? getFullName(deleteTarget) : ''}? Questa azione non può essere annullata.`}
         confirmLabel="Elimina"
         danger

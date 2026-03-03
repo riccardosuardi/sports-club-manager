@@ -24,10 +24,10 @@ export default function MemberDetail() {
   async function fetchData() {
     setLoading(true)
     const [memberRes, childrenRes, enrollRes, allRes] = await Promise.all([
-      supabase.from('members').select('*, parent:parent_id(id, first_name, last_name)').eq('id', id).single(),
-      supabase.from('members').select('id, first_name, last_name, date_of_birth, status').eq('parent_id', id),
+      supabase.from('users').select('*, parent:parent_id(id, first_name, last_name)').eq('id', id).single(),
+      supabase.from('users').select('id, first_name, last_name, date_of_birth, status').eq('parent_id', id),
       supabase.from('enrollments').select('*, course:course_id(name, sport, schedule)').eq('member_id', id),
-      supabase.from('members').select('id, first_name, last_name, is_minor'),
+      supabase.from('users').select('id, first_name, last_name, is_minor'),
     ])
     if (memberRes.data) setMember(memberRes.data)
     setChildren(childrenRes.data || [])
@@ -37,7 +37,7 @@ export default function MemberDetail() {
   }
 
   if (loading) return <div className="py-12 text-center text-gray-500">Caricamento...</div>
-  if (!member) return <div className="py-12 text-center text-gray-500">Socio non trovato</div>
+  if (!member) return <div className="py-12 text-center text-gray-500">Atleta non trovato</div>
 
   const age = calculateAge(member.date_of_birth)
   const certExpired = isCertificateExpired(member.medical_certificate_expiry)
@@ -46,7 +46,7 @@ export default function MemberDetail() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
-        <button onClick={() => navigate('/soci')} className="rounded-lg p-2 text-gray-400 hover:bg-gray-100">
+        <button onClick={() => navigate('/atleti')} className="rounded-lg p-2 text-gray-400 hover:bg-gray-100">
           <ArrowLeft size={20} />
         </button>
         <div className="flex-1">
@@ -81,7 +81,7 @@ export default function MemberDetail() {
             <h3 className="mb-4 text-lg font-semibold text-gray-900">Stato</h3>
             <div className="space-y-3">
               <div>
-                <p className="text-xs text-gray-500">Stato socio</p>
+                <p className="text-xs text-gray-500">Stato atleta</p>
                 <Badge status={member.status} />
               </div>
               <div>
@@ -128,7 +128,7 @@ export default function MemberDetail() {
             {children.map((child) => (
               <button
                 key={child.id}
-                onClick={() => navigate(`/soci/${child.id}`)}
+                onClick={() => navigate(`/atleti/${child.id}`)}
                 className="flex items-center gap-3 rounded-lg border border-gray-200 p-3 text-left hover:bg-gray-50"
               >
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary-100 text-primary-700 text-sm font-medium">
@@ -166,7 +166,7 @@ export default function MemberDetail() {
         )}
       </div>
 
-      <Modal open={showEdit} onClose={() => setShowEdit(false)} title="Modifica Socio" size="lg">
+      <Modal open={showEdit} onClose={() => setShowEdit(false)} title="Modifica Atleta" size="lg">
         <MemberForm member={member} members={allMembers} onSaved={() => { setShowEdit(false); fetchData() }} onCancel={() => setShowEdit(false)} />
       </Modal>
     </div>

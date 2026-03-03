@@ -10,10 +10,13 @@ export function AuthProvider({ children }) {
 
   async function fetchProfile(userId) {
     const { data } = await supabase
-      .from('profiles')
+      .from('users')
       .select('*')
-      .eq('id', userId)
+      .eq('auth_id', userId)
       .single()
+    if (data) {
+      data.full_name = [data.first_name, data.last_name].filter(Boolean).join(' ') || data.email
+    }
     setProfile(data)
   }
 

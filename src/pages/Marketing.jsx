@@ -20,39 +20,31 @@ export default function Marketing() {
   const [editing, setEditing] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [convertTarget, setConvertTarget] = useState(null)
+  const [showEmail, setShowEmail] = useState(false)
 
   useEffect(() => { fetchContacts() }, [])
 
   async function fetchContacts() {
     setLoading(true)
-    const { data } = await supabase.from('contacts').select('*').order('created_at', { ascending: false })
+    const { data } = await supabase.from('users').select('*').eq('is_member', false).order('created_at', { ascending: false })
     setContacts(data || [])
     setLoading(false)
   }
 
   async function handleDelete(id) {
-    await supabase.from('contacts').delete().eq('id', id)
+    await supabase.from('users').delete().eq('id', id)
     fetchContacts()
   }
 
   async function handleConvert(contact) {
-    // Crea socio dal contatto
-    const { data: member, error: memberError } = await supabase.from('members').insert({
-      first_name: contact.first_name,
-      last_name: contact.last_name,
-      email: contact.email,
-      phone: contact.phone,
-      status: 'attivo',
+    // Converti contatto a socio: basta aggiornare is_member e contact_status
+    const { error } = await supabase.from('users').update({
+      is_member: true,
+      contact_status: 'convertito',
       membership_start: new Date().toISOString().split('T')[0],
-    }).select().single()
-
-    if (memberError) { alert(memberError.message); return }
-
-    // Aggiorna contatto come convertito
-    await supabase.from('contacts').update({
-      status: 'convertito',
-      converted_member_id: member.id,
     }).eq('id', contact.id)
+
+    if (error) { alert(error.message); return }
 
     setConvertTarget(null)
     fetchContacts()
@@ -62,15 +54,15 @@ export default function Marketing() {
     const matchesSearch = !search ||
       `${c.first_name} ${c.last_name}`.toLowerCase().includes(search.toLowerCase()) ||
       (c.email || '').toLowerCase().includes(search.toLowerCase())
-    const matchesStatus = filterStatus === 'tutti' || c.status === filterStatus
+    const matchesStatus = filterStatus === 'tutti' || c.contact_status === filterStatus
     return matchesSearch && matchesStatus
   })
 
   const stats = {
     total: contacts.length,
-    new: contacts.filter(c => c.status === 'nuovo').length,
-    interested: contacts.filter(c => c.status === 'interessato').length,
-    converted: contacts.filter(c => c.status === 'convertito').length,
+    new: contacts.filter(c => c.contact_status === 'nuovo').length,
+    interested: contacts.filter(c => c.contact_status === 'interessato').length,
+    converted: contacts.filter(c => c.contact_status === 'convertito').length,
   }
 
   return (
@@ -82,22 +74,30 @@ export default function Marketing() {
             {stats.total} contatti | {stats.new} nuovi | {stats.interested} interessati | {stats.converted} convertiti
           </p>
         </div>
-        <button
-          onClick={() => { setEditing(null); setShowForm(true) }}
-          className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-700"
-        >
-          <Plus size={18} /> Nuovo Contatto
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowEmail(true)}
+            className="inline-flex items-center gap-2 rounded-lg border border-primary-600 px-4 py-2.5 text-sm font-medium text-primary-600 hover:bg-primary-50"
+          >
+            <Mail size={18} /> Invia Email
+          </button>
+          <button
+            onClick={() => { setEditing(null); setShowForm(true) }}
+            className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-700"
+          >
+            <Plus size={18} /> Nuovo Contatto
+          </button>
+        </div>
       </div>
 
       {/* Pipeline visuale */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         {[
           { label: 'Nuovi', count: stats.new, color: 'bg-blue-500' },
-          { label: 'Contattati', count: contacts.filter(c => c.status === 'contattato').length, color: 'bg-purple-500' },
+          { label: 'Contattati', count: contacts.filter(c => c.contact_status === 'contattato').length, color: 'bg-purple-500' },
           { label: 'Interessati', count: stats.interested, color: 'bg-orange-500' },
           { label: 'Convertiti', count: stats.converted, color: 'bg-green-500' },
-          { label: 'Persi', count: contacts.filter(c => c.status === 'perso').length, color: 'bg-red-500' },
+          { label: 'Persi', count: contacts.filter(c => c.contact_status === 'perso').length, color: 'bg-red-500' },
         ].map((s) => (
           <div key={s.label} className="rounded-lg border border-gray-200 bg-white p-4 text-center">
             <div className={`mx-auto mb-2 h-2 w-12 rounded-full ${s.color}`} />
@@ -162,9 +162,9 @@ export default function Marketing() {
                   <td className="hidden whitespace-nowrap px-4 py-3 text-sm text-gray-600 lg:table-cell">{contact.interest || '-'}</td>
                   <td className="whitespace-nowrap px-4 py-3">
                     <select
-                      value={contact.status}
+                      value={contact.contact_status}
                       onChange={async (e) => {
-                        await supabase.from('contacts').update({ status: e.target.value }).eq('id', contact.id)
+                        await supabase.from('users').update({ contact_status: e.target.value }).eq('id', contact.id)
                         fetchContacts()
                       }}
                       className="rounded border border-gray-300 px-2 py-1 text-xs"
@@ -181,8 +181,8 @@ export default function Marketing() {
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-right">
                     <div className="flex justify-end gap-2">
-                      {contact.status !== 'convertito' && (
-                        <button onClick={() => setConvertTarget(contact)} className="text-xs text-green-600 hover:text-green-700" title="Converti a socio">
+                      {contact.contact_status !== 'convertito' && (
+                        <button onClick={() => setConvertTarget(contact)} className="text-xs text-green-600 hover:text-green-700" title="Converti a atleta">
                           <UserPlus size={16} />
                         </button>
                       )}
@@ -196,6 +196,10 @@ export default function Marketing() {
           </table>
         </div>
       )}
+
+      <Modal open={showEmail} onClose={() => setShowEmail(false)} title="Invia Comunicazione Email" size="lg">
+        <EmailCompose contacts={filtered.filter(c => c.email)} onClose={() => setShowEmail(false)} />
+      </Modal>
 
       <Modal open={showForm} onClose={() => setShowForm(false)} title={editing ? 'Modifica Contatto' : 'Nuovo Contatto'} size="md">
         <ContactForm contact={editing} onSaved={() => { setShowForm(false); fetchContacts() }} onCancel={() => setShowForm(false)} />
@@ -215,8 +219,8 @@ export default function Marketing() {
         open={!!convertTarget}
         onClose={() => setConvertTarget(null)}
         onConfirm={() => handleConvert(convertTarget)}
-        title="Converti a Socio"
-        message={`Vuoi creare un nuovo socio da ${convertTarget?.first_name} ${convertTarget?.last_name}? I dati verranno copiati nella scheda socio.`}
+        title="Converti a Atleta"
+        message={`Vuoi convertire ${convertTarget?.first_name} ${convertTarget?.last_name} in atleta? I dati verranno copiati nella scheda atleta.`}
         confirmLabel="Converti"
       />
     </div>
@@ -231,7 +235,7 @@ function ContactForm({ contact, onSaved, onCancel }) {
     phone: contact?.phone || '',
     source: contact?.source || '',
     interest: contact?.interest || '',
-    status: contact?.status || 'nuovo',
+    contact_status: contact?.contact_status || 'nuovo',
     notes: contact?.notes || '',
   })
   const [error, setError] = useState('')
@@ -251,10 +255,12 @@ function ContactForm({ contact, onSaved, onCancel }) {
 
     try {
       if (contact?.id) {
-        const { error } = await supabase.from('contacts').update(payload).eq('id', contact.id)
+        const { error } = await supabase.from('users').update(payload).eq('id', contact.id)
         if (error) throw error
       } else {
-        const { error } = await supabase.from('contacts').insert(payload)
+        payload.is_member = false
+        payload.status = 'attivo'
+        const { error } = await supabase.from('users').insert(payload)
         if (error) throw error
       }
       onSaved()
@@ -297,7 +303,7 @@ function ContactForm({ contact, onSaved, onCancel }) {
         </div>
         <div>
           <label className="mb-1 block text-sm font-medium text-gray-700">Stato</label>
-          <select value={form.status} onChange={(e) => set('status', e.target.value)} className={inputClass}>
+          <select value={form.contact_status} onChange={(e) => set('contact_status', e.target.value)} className={inputClass}>
             <option value="nuovo">Nuovo</option>
             <option value="contattato">Contattato</option>
             <option value="interessato">Interessato</option>
@@ -317,5 +323,106 @@ function ContactForm({ contact, onSaved, onCancel }) {
         </button>
       </div>
     </form>
+  )
+}
+
+function EmailCompose({ contacts, onClose }) {
+  const [selected, setSelected] = useState(new Set(contacts.map(c => c.id)))
+  const [subject, setSubject] = useState('')
+  const [body, setBody] = useState('')
+
+  function toggleContact(id) {
+    setSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function toggleAll() {
+    if (selected.size === contacts.length) {
+      setSelected(new Set())
+    } else {
+      setSelected(new Set(contacts.map(c => c.id)))
+    }
+  }
+
+  function handleSend() {
+    const recipients = contacts.filter(c => selected.has(c.id)).map(c => c.email).filter(Boolean)
+    if (recipients.length === 0) return
+    const mailto = `mailto:?bcc=${encodeURIComponent(recipients.join(','))}&subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+    window.open(mailto)
+    // Aggiorna last_contacted_at per i contatti selezionati
+    const ids = contacts.filter(c => selected.has(c.id)).map(c => c.id)
+    supabase.from('users').update({ last_contacted_at: new Date().toISOString() }).in('id', ids).then(() => {})
+    onClose()
+  }
+
+  const inputClass = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500 focus:outline-none'
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <div className="mb-1 flex items-center justify-between">
+          <label className="block text-sm font-medium text-gray-700">
+            Destinatari ({contacts.filter(c => selected.has(c.id)).length} selezionati)
+          </label>
+          <button onClick={toggleAll} className="text-xs text-primary-600 hover:text-primary-700">
+            {selected.size === contacts.length ? 'Deseleziona tutti' : 'Seleziona tutti'}
+          </button>
+        </div>
+        <div className="max-h-40 overflow-y-auto rounded-lg border border-gray-200 p-2">
+          {contacts.length === 0 ? (
+            <p className="text-sm text-gray-500 py-2 text-center">Nessun contatto con email</p>
+          ) : (
+            contacts.map(c => (
+              <label key={c.id} className="flex items-center gap-2 rounded px-2 py-1.5 hover:bg-gray-50 text-sm cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={selected.has(c.id)}
+                  onChange={() => toggleContact(c.id)}
+                  className="rounded border-gray-300 text-primary-600"
+                />
+                <span className="font-medium">{c.first_name} {c.last_name}</span>
+                <span className="text-gray-400">({c.email})</span>
+              </label>
+            ))
+          )}
+        </div>
+      </div>
+      <div>
+        <label className="mb-1 block text-sm font-medium text-gray-700">Oggetto</label>
+        <input
+          type="text"
+          value={subject}
+          onChange={(e) => setSubject(e.target.value)}
+          placeholder="Oggetto della comunicazione..."
+          className={inputClass}
+        />
+      </div>
+      <div>
+        <label className="mb-1 block text-sm font-medium text-gray-700">Messaggio</label>
+        <textarea
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+          rows={6}
+          placeholder="Scrivi il messaggio..."
+          className={inputClass}
+        />
+      </div>
+      <div className="flex justify-end gap-3 border-t pt-4">
+        <button onClick={onClose} className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+          Annulla
+        </button>
+        <button
+          onClick={handleSend}
+          disabled={selected.size === 0 || !subject}
+          className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50"
+        >
+          Apri nel client email
+        </button>
+      </div>
+    </div>
   )
 }

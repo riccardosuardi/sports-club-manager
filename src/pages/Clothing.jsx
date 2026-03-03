@@ -27,7 +27,7 @@ export default function Clothing() {
     const [itemsRes, ordersRes, membersRes] = await Promise.all([
       supabase.from('clothing_items').select('*').order('name'),
       supabase.from('clothing_orders').select('*, member:member_id(first_name, last_name), item:item_id(name, category)').order('ordered_at', { ascending: false }),
-      supabase.from('members').select('id, first_name, last_name').eq('status', 'attivo').order('last_name'),
+      supabase.from('users').select('id, first_name, last_name').eq('is_member', true).eq('status', 'attivo').order('last_name'),
     ])
     setItems(itemsRes.data || [])
     setOrders(ordersRes.data || [])
@@ -136,7 +136,7 @@ export default function Clothing() {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Socio</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Atleta</th>
                   <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Articolo</th>
                   <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Taglia</th>
                   <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Qt&agrave;</th>
@@ -321,7 +321,7 @@ function OrderForm({ items, members, onSaved, onCancel }) {
     <form onSubmit={handleSubmit} className="space-y-4">
       {error && <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</div>}
       <div>
-        <label className="mb-1 block text-sm font-medium text-gray-700">Socio *</label>
+        <label className="mb-1 block text-sm font-medium text-gray-700">Atleta *</label>
         <select value={form.member_id} onChange={(e) => set('member_id', e.target.value)} required className={inputClass}>
           <option value="">Seleziona...</option>
           {members.map(m => <option key={m.id} value={m.id}>{m.last_name} {m.first_name}</option>)}
