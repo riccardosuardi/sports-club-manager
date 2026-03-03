@@ -7,6 +7,7 @@ const EMPTY = {
   fiscal_code: '',
   date_of_birth: '',
   gender: '',
+  member_type: '',
   email: '',
   phone: '',
   address: '',
@@ -105,6 +106,15 @@ export default function MemberForm({ member, members = [], onSaved, onCancel }) 
             <option value="M">Maschio</option>
             <option value="F">Femmina</option>
             <option value="Altro">Altro</option>
+          </select>
+        </div>
+        <div>
+          <label className={labelClass}>Tipologia Socio</label>
+          <select value={form.member_type || ''} onChange={(e) => set('member_type', e.target.value)} className={inputClass}>
+            <option value="">--</option>
+            <option value="giovane">Giovane</option>
+            <option value="adulto">Adulto</option>
+            <option value="genitore">Genitore</option>
           </select>
         </div>
         <div>

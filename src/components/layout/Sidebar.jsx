@@ -7,6 +7,7 @@ import {
   Megaphone,
   Settings,
   Trophy,
+  Calendar,
   X,
 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
@@ -15,6 +16,7 @@ const navigation = [
   { name: 'Dashboard', to: '/', icon: LayoutDashboard },
   { name: 'Soci', to: '/soci', icon: Users },
   { name: 'Corsi', to: '/corsi', icon: GraduationCap },
+  { name: 'Gare', to: '/gare', icon: Calendar },
   { name: 'Abbigliamento', to: '/abbigliamento', icon: Shirt },
   { name: 'Marketing', to: '/marketing', icon: Megaphone, roles: ['admin', 'segreteria'] },
   { name: 'Impostazioni', to: '/impostazioni', icon: Settings, roles: ['admin'] },

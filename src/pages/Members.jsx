@@ -137,6 +137,7 @@ export default function Members() {
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Nome</th>
                 <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Tessera</th>
+                <th className="hidden px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 md:table-cell">Tipo</th>
                 <th className="hidden px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 md:table-cell">Et&agrave;</th>
                 <th className="hidden px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 lg:table-cell">Genitore</th>
                 <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Stato</th>
@@ -159,6 +160,9 @@ export default function Members() {
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-600">
                       {member.membership_number || '-'}
+                    </td>
+                    <td className="hidden whitespace-nowrap px-4 py-3 text-sm capitalize text-gray-600 md:table-cell">
+                      {member.member_type || '-'}
                     </td>
                     <td className="hidden whitespace-nowrap px-4 py-3 text-sm text-gray-600 md:table-cell">
                       {age !== null ? `${age} anni` : '-'}

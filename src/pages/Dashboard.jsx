@@ -12,6 +12,7 @@ export default function Dashboard() {
   const [recentMembers, setRecentMembers] = useState([])
   const [expiringCerts, setExpiringCerts] = useState([])
   const [pendingOrders, setPendingOrders] = useState([])
+  const [upcomingCompetitions, setUpcomingCompetitions] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => { fetchDashboard() }, [])
@@ -24,12 +25,14 @@ export default function Dashboard() {
       enrollmentsRes,
       contactsRes,
       ordersRes,
+      competitionsRes,
     ] = await Promise.all([
       supabase.from('members').select('*'),
       supabase.from('courses').select('id, is_active'),
       supabase.from('enrollments').select('id, status'),
       supabase.from('contacts').select('id, status'),
       supabase.from('clothing_orders').select('*, member:member_id(first_name, last_name), item:item_id(name)').in('status', ['richiesto', 'ordinato']).order('ordered_at', { ascending: false }).limit(5),
+      supabase.from('competitions').select('id, name, competition_date, status, location, city, sport').gte('competition_date', new Date().toISOString().split('T')[0]).order('competition_date').limit(5),
     ])
 
     const members = membersRes.data || []
@@ -62,6 +65,7 @@ export default function Dashboard() {
     )
 
     setPendingOrders(ordersRes.data || [])
+    setUpcomingCompetitions(competitionsRes.data || [])
     setLoading(false)
   }
 
@@ -135,6 +139,38 @@ export default function Dashboard() {
                   </div>
                 )
               })}
+            </div>
+          )}
+        </div>
+
+        {/* Prossime gare */}
+        <div className="rounded-lg border border-gray-200 bg-white p-6 lg:col-span-2">
+          <div className="mb-4 flex items-center justify-between">
+            <h3 className="text-lg font-semibold text-gray-900">Prossime Gare</h3>
+            <button onClick={() => navigate('/gare')} className="text-sm text-primary-600 hover:text-primary-700">Calendario</button>
+          </div>
+          {upcomingCompetitions.length === 0 ? (
+            <p className="text-sm text-gray-500">Nessuna gara in programma</p>
+          ) : (
+            <div className="space-y-3">
+              {upcomingCompetitions.map(c => (
+                <div key={c.id} className="flex items-center justify-between rounded-lg border border-gray-100 p-3">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-orange-100 text-sm font-medium text-orange-700">
+                      <Calendar size={18} />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">{c.name}</p>
+                      <p className="text-xs text-gray-500">
+                        {formatDate(c.competition_date)}
+                        {c.city && ` · ${c.city}`}
+                        {c.sport && ` · ${c.sport}`}
+                      </p>
+                    </div>
+                  </div>
+                  <Badge status={c.status} />
+                </div>
+              ))}
             </div>
           )}
         </div>
