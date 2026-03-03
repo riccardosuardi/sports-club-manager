@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Plus, Megaphone, UserPlus, Phone, Mail } from 'lucide-react'
+import { Plus, Megaphone, UserPlus, Phone, Mail, LayoutList, Columns3 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { formatDate, formatDateTime } from '../lib/utils'
 import Badge from '../components/ui/Badge'
@@ -10,6 +10,13 @@ import ConfirmDialog from '../components/ui/ConfirmDialog'
 
 const SOURCES = ['Sito web', 'Passaparola', 'Evento', 'Social', 'Volantino', 'Altro']
 const STATUSES = ['tutti', 'nuovo', 'contattato', 'interessato', 'convertito', 'perso']
+const PIPELINE_COLUMNS = [
+  { key: 'nuovo', label: 'Nuovi', color: 'border-blue-400', bg: 'bg-blue-50', dot: 'bg-blue-500' },
+  { key: 'contattato', label: 'Contattati', color: 'border-purple-400', bg: 'bg-purple-50', dot: 'bg-purple-500' },
+  { key: 'interessato', label: 'Interessati', color: 'border-orange-400', bg: 'bg-orange-50', dot: 'bg-orange-500' },
+  { key: 'convertito', label: 'Convertiti', color: 'border-green-400', bg: 'bg-green-50', dot: 'bg-green-500' },
+  { key: 'perso', label: 'Persi', color: 'border-red-400', bg: 'bg-red-50', dot: 'bg-red-500' },
+]
 
 export default function Marketing() {
   const [contacts, setContacts] = useState([])
@@ -21,6 +28,7 @@ export default function Marketing() {
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [convertTarget, setConvertTarget] = useState(null)
   const [showEmail, setShowEmail] = useState(false)
+  const [viewMode, setViewMode] = useState('list') // 'list' | 'board'
 
   useEffect(() => { fetchContacts() }, [])
 
@@ -37,7 +45,6 @@ export default function Marketing() {
   }
 
   async function handleConvert(contact) {
-    // Converti contatto a socio: basta aggiornare is_member e contact_status
     const { error } = await supabase.from('users').update({
       is_member: true,
       contact_status: 'convertito',
@@ -45,8 +52,12 @@ export default function Marketing() {
     }).eq('id', contact.id)
 
     if (error) { alert(error.message); return }
-
     setConvertTarget(null)
+    fetchContacts()
+  }
+
+  async function handleStatusChange(contactId, newStatus) {
+    await supabase.from('users').update({ contact_status: newStatus }).eq('id', contactId)
     fetchContacts()
   }
 
@@ -69,7 +80,7 @@ export default function Marketing() {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Marketing & Contatti</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Contatti</h1>
           <p className="text-sm text-gray-500">
             {stats.total} contatti | {stats.new} nuovi | {stats.interested} interessati | {stats.converted} convertiti
           </p>
@@ -90,48 +101,125 @@ export default function Marketing() {
         </div>
       </div>
 
-      {/* Pipeline visuale */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-        {[
-          { label: 'Nuovi', count: stats.new, color: 'bg-blue-500' },
-          { label: 'Contattati', count: contacts.filter(c => c.contact_status === 'contattato').length, color: 'bg-purple-500' },
-          { label: 'Interessati', count: stats.interested, color: 'bg-orange-500' },
-          { label: 'Convertiti', count: stats.converted, color: 'bg-green-500' },
-          { label: 'Persi', count: contacts.filter(c => c.contact_status === 'perso').length, color: 'bg-red-500' },
-        ].map((s) => (
-          <div key={s.label} className="rounded-lg border border-gray-200 bg-white p-4 text-center">
-            <div className={`mx-auto mb-2 h-2 w-12 rounded-full ${s.color}`} />
-            <p className="text-2xl font-bold text-gray-900">{s.count}</p>
-            <p className="text-xs text-gray-500">{s.label}</p>
+      {/* Vista toggle + Filtri */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="sm:w-80">
+            <SearchInput value={search} onChange={setSearch} placeholder="Cerca contatti..." />
           </div>
-        ))}
-      </div>
-
-      {/* Filtri */}
-      <div className="flex flex-col gap-3 sm:flex-row">
-        <div className="sm:w-80">
-          <SearchInput value={search} onChange={setSearch} placeholder="Cerca contatti..." />
+          {viewMode === 'list' && (
+            <div className="flex flex-wrap gap-2">
+              {STATUSES.map((s) => (
+                <button
+                  key={s}
+                  onClick={() => setFilterStatus(s)}
+                  className={`rounded-lg px-3 py-2 text-sm font-medium capitalize ${
+                    filterStatus === s ? 'bg-primary-100 text-primary-700' : 'text-gray-500 hover:bg-gray-100'
+                  }`}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
-        <div className="flex flex-wrap gap-2">
-          {STATUSES.map((s) => (
-            <button
-              key={s}
-              onClick={() => setFilterStatus(s)}
-              className={`rounded-lg px-3 py-2 text-sm font-medium capitalize ${
-                filterStatus === s ? 'bg-primary-100 text-primary-700' : 'text-gray-500 hover:bg-gray-100'
-              }`}
-            >
-              {s}
-            </button>
-          ))}
+        <div className="flex rounded-lg border border-gray-200 p-0.5">
+          <button
+            onClick={() => setViewMode('list')}
+            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium ${
+              viewMode === 'list' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <LayoutList size={16} /> Lista
+          </button>
+          <button
+            onClick={() => setViewMode('board')}
+            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium ${
+              viewMode === 'board' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <Columns3 size={16} /> Board
+          </button>
         </div>
       </div>
 
       {loading ? (
         <div className="py-12 text-center text-gray-500">Caricamento...</div>
+      ) : viewMode === 'board' ? (
+        /* ===== KANBAN BOARD ===== */
+        <div className="flex gap-4 overflow-x-auto pb-4">
+          {PIPELINE_COLUMNS.map((col) => {
+            const colContacts = contacts.filter((c) => {
+              const matchesSearch = !search ||
+                `${c.first_name} ${c.last_name}`.toLowerCase().includes(search.toLowerCase()) ||
+                (c.email || '').toLowerCase().includes(search.toLowerCase())
+              return c.contact_status === col.key && matchesSearch
+            })
+            return (
+              <div key={col.key} className={`flex min-w-[260px] flex-1 flex-col rounded-lg border-t-4 ${col.color} bg-gray-50`}>
+                <div className="flex items-center justify-between px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <div className={`h-2.5 w-2.5 rounded-full ${col.dot}`} />
+                    <h3 className="text-sm font-semibold text-gray-700">{col.label}</h3>
+                  </div>
+                  <span className="rounded-full bg-white px-2 py-0.5 text-xs font-medium text-gray-600 shadow-sm">
+                    {colContacts.length}
+                  </span>
+                </div>
+                <div className="flex-1 space-y-2 px-3 pb-3">
+                  {colContacts.length === 0 ? (
+                    <p className="py-4 text-center text-xs text-gray-400">Nessun contatto</p>
+                  ) : (
+                    colContacts.map((contact) => (
+                      <div key={contact.id} className="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
+                        <p className="text-sm font-medium text-gray-900">{contact.first_name} {contact.last_name}</p>
+                        {contact.email && (
+                          <p className="mt-0.5 flex items-center gap-1 text-xs text-gray-500">
+                            <Mail size={10} /> {contact.email}
+                          </p>
+                        )}
+                        {contact.phone && (
+                          <p className="mt-0.5 flex items-center gap-1 text-xs text-gray-500">
+                            <Phone size={10} /> {contact.phone}
+                          </p>
+                        )}
+                        {contact.interest && (
+                          <span className="mt-1.5 inline-block rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">{contact.interest}</span>
+                        )}
+                        <div className="mt-2 flex items-center justify-between border-t border-gray-100 pt-2">
+                          <select
+                            value={contact.contact_status}
+                            onChange={(e) => handleStatusChange(contact.id, e.target.value)}
+                            className="rounded border border-gray-200 px-1.5 py-0.5 text-xs text-gray-600"
+                          >
+                            <option value="nuovo">Nuovo</option>
+                            <option value="contattato">Contattato</option>
+                            <option value="interessato">Interessato</option>
+                            <option value="convertito">Convertito</option>
+                            <option value="perso">Perso</option>
+                          </select>
+                          <div className="flex gap-1.5">
+                            {contact.contact_status !== 'convertito' && (
+                              <button onClick={() => setConvertTarget(contact)} className="text-green-600 hover:text-green-700" title="Converti">
+                                <UserPlus size={14} />
+                              </button>
+                            )}
+                            <button onClick={() => { setEditing(contact); setShowForm(true) }} className="text-xs text-gray-500 hover:text-gray-700">Mod.</button>
+                            <button onClick={() => setDeleteTarget(contact)} className="text-xs text-red-500 hover:text-red-700">Elim.</button>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
       ) : filtered.length === 0 ? (
         <EmptyState icon={Megaphone} title="Nessun contatto trovato" description="Aggiungi il primo contatto" />
       ) : (
+        /* ===== LIST VIEW ===== */
         <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
@@ -163,10 +251,7 @@ export default function Marketing() {
                   <td className="whitespace-nowrap px-4 py-3">
                     <select
                       value={contact.contact_status}
-                      onChange={async (e) => {
-                        await supabase.from('users').update({ contact_status: e.target.value }).eq('id', contact.id)
-                        fetchContacts()
-                      }}
+                      onChange={(e) => handleStatusChange(contact.id, e.target.value)}
                       className="rounded border border-gray-300 px-2 py-1 text-xs"
                     >
                       <option value="nuovo">Nuovo</option>
@@ -353,7 +438,6 @@ function EmailCompose({ contacts, onClose }) {
     if (recipients.length === 0) return
     const mailto = `mailto:?bcc=${encodeURIComponent(recipients.join(','))}&subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
     window.open(mailto)
-    // Aggiorna last_contacted_at per i contatti selezionati
     const ids = contacts.filter(c => selected.has(c.id)).map(c => c.id)
     supabase.from('users').update({ last_contacted_at: new Date().toISOString() }).in('id', ids).then(() => {})
     onClose()

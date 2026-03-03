@@ -9,8 +9,11 @@ import Courses from './pages/Courses'
 import Clothing from './pages/Clothing'
 import Competitions from './pages/Competitions'
 import Marketing from './pages/Marketing'
-import Settings from './pages/Settings'
-import YouthActivities from './pages/YouthActivities'
+import SettingsUser from './pages/SettingsUser'
+import SettingsAssociation from './pages/SettingsAssociation'
+import YouthAthletes from './pages/YouthAthletes'
+import YouthParents from './pages/YouthParents'
+import YouthCourses from './pages/YouthCourses'
 
 function ProtectedRoute({ children, roles }) {
   const { user, profile, loading, hasRole } = useAuth()
@@ -56,23 +59,39 @@ function AppRoutes() {
         <Route path="/" element={<Dashboard />} />
         <Route path="/atleti" element={<Members />} />
         <Route path="/atleti/:id" element={<MemberDetail />} />
-        <Route path="/attivita-giovanile" element={<YouthActivities />} />
-        <Route path="/corsi" element={<Courses />} />
         <Route path="/gare" element={<Competitions />} />
+        <Route path="/attivita" element={<Courses />} />
         <Route path="/abbigliamento" element={<Clothing />} />
+
+        {/* Attività Giovanile */}
+        <Route path="/attivita-giovanile/atleti" element={<YouthAthletes />} />
+        <Route path="/attivita-giovanile/genitori" element={<YouthParents />} />
+        <Route path="/attivita-giovanile/attivita" element={<YouthCourses />} />
+
+        {/* Marketing */}
         <Route
-          path="/marketing"
+          path="/marketing/contatti"
           element={
             <ProtectedRoute roles={['admin', 'segreteria']}>
               <Marketing />
             </ProtectedRoute>
           }
         />
+
+        {/* Impostazioni */}
         <Route
-          path="/impostazioni"
+          path="/impostazioni/utente"
           element={
             <ProtectedRoute roles={['admin']}>
-              <Settings />
+              <SettingsUser />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/impostazioni/associazione"
+          element={
+            <ProtectedRoute roles={['admin']}>
+              <SettingsAssociation />
             </ProtectedRoute>
           }
         />
