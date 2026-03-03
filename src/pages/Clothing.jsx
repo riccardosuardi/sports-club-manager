@@ -27,7 +27,7 @@ export default function Clothing() {
     const [itemsRes, ordersRes, membersRes] = await Promise.all([
       supabase.from('clothing_items').select('*').order('name'),
       supabase.from('clothing_orders').select('*, member:member_id(first_name, last_name), item:item_id(name, category)').order('ordered_at', { ascending: false }),
-      supabase.from('persone').select('id, first_name, last_name').eq('is_member', true).eq('status', 'attivo').order('last_name'),
+      supabase.from('users').select('id, first_name, last_name').eq('is_member', true).eq('status', 'attivo').order('last_name'),
     ])
     setItems(itemsRes.data || [])
     setOrders(ordersRes.data || [])

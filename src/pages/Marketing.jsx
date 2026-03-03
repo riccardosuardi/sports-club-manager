@@ -25,19 +25,19 @@ export default function Marketing() {
 
   async function fetchContacts() {
     setLoading(true)
-    const { data } = await supabase.from('persone').select('*').eq('is_member', false).order('created_at', { ascending: false })
+    const { data } = await supabase.from('users').select('*').eq('is_member', false).order('created_at', { ascending: false })
     setContacts(data || [])
     setLoading(false)
   }
 
   async function handleDelete(id) {
-    await supabase.from('persone').delete().eq('id', id)
+    await supabase.from('users').delete().eq('id', id)
     fetchContacts()
   }
 
   async function handleConvert(contact) {
     // Converti contatto a socio: basta aggiornare is_member e contact_status
-    const { error } = await supabase.from('persone').update({
+    const { error } = await supabase.from('users').update({
       is_member: true,
       contact_status: 'convertito',
       membership_start: new Date().toISOString().split('T')[0],
@@ -155,7 +155,7 @@ export default function Marketing() {
                     <select
                       value={contact.contact_status}
                       onChange={async (e) => {
-                        await supabase.from('persone').update({ contact_status: e.target.value }).eq('id', contact.id)
+                        await supabase.from('users').update({ contact_status: e.target.value }).eq('id', contact.id)
                         fetchContacts()
                       }}
                       className="rounded border border-gray-300 px-2 py-1 text-xs"
@@ -242,12 +242,12 @@ function ContactForm({ contact, onSaved, onCancel }) {
 
     try {
       if (contact?.id) {
-        const { error } = await supabase.from('persone').update(payload).eq('id', contact.id)
+        const { error } = await supabase.from('users').update(payload).eq('id', contact.id)
         if (error) throw error
       } else {
         payload.is_member = false
         payload.status = 'attivo'
-        const { error } = await supabase.from('persone').insert(payload)
+        const { error } = await supabase.from('users').insert(payload)
         if (error) throw error
       }
       onSaved()

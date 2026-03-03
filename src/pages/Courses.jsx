@@ -27,7 +27,7 @@ export default function Courses() {
     const [coursesRes, enrollRes, membersRes] = await Promise.all([
       supabase.from('courses').select('*').order('name'),
       supabase.from('enrollments').select('*, member:member_id(first_name, last_name), course:course_id(name)'),
-      supabase.from('persone').select('id, first_name, last_name').eq('is_member', true).eq('status', 'attivo').order('last_name'),
+      supabase.from('users').select('id, first_name, last_name').eq('is_member', true).eq('status', 'attivo').order('last_name'),
     ])
     setCourses(coursesRes.data || [])
     setEnrollments(enrollRes.data || [])

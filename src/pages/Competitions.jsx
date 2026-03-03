@@ -67,7 +67,7 @@ export default function Competitions() {
     setLoading(true)
     const [compRes, membersRes] = await Promise.all([
       supabase.from('competitions').select('*').order('competition_date', { ascending: true }),
-      supabase.from('persone').select('id, first_name, last_name, member_type').eq('is_member', true).eq('status', 'attivo').order('last_name'),
+      supabase.from('users').select('id, first_name, last_name, member_type').eq('is_member', true).eq('status', 'attivo').order('last_name'),
     ])
     if (!compRes.error) setCompetitions(compRes.data || [])
     if (!membersRes.error) setMembers(membersRes.data || [])

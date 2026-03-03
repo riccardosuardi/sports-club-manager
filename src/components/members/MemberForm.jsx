@@ -59,11 +59,11 @@ export default function MemberForm({ member, members = [], onSaved, onCancel }) 
     try {
       payload.is_member = true
       if (member?.id) {
-        const { error } = await supabase.from('persone').update(payload).eq('id', member.id)
+        const { error } = await supabase.from('users').update(payload).eq('id', member.id)
         if (error) throw error
       } else {
         delete payload.id
-        const { error } = await supabase.from('persone').insert(payload)
+        const { error } = await supabase.from('users').insert(payload)
         if (error) throw error
       }
       onSaved()

@@ -27,10 +27,10 @@ export default function Dashboard() {
       ordersRes,
       competitionsRes,
     ] = await Promise.all([
-      supabase.from('persone').select('*').eq('is_member', true),
+      supabase.from('users').select('*').eq('is_member', true),
       supabase.from('courses').select('id, is_active'),
       supabase.from('enrollments').select('id, status'),
-      supabase.from('persone').select('id, contact_status').eq('is_member', false),
+      supabase.from('users').select('id, contact_status').eq('is_member', false),
       supabase.from('clothing_orders').select('*, member:member_id(first_name, last_name), item:item_id(name)').in('status', ['richiesto', 'ordinato']).order('ordered_at', { ascending: false }).limit(5),
       supabase.from('competitions').select('id, name, competition_date, status, location, city, sport').gte('competition_date', new Date().toISOString().split('T')[0]).order('competition_date').limit(5),
     ])

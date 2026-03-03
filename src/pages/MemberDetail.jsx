@@ -24,10 +24,10 @@ export default function MemberDetail() {
   async function fetchData() {
     setLoading(true)
     const [memberRes, childrenRes, enrollRes, allRes] = await Promise.all([
-      supabase.from('persone').select('*, parent:parent_id(id, first_name, last_name)').eq('id', id).single(),
-      supabase.from('persone').select('id, first_name, last_name, date_of_birth, status').eq('parent_id', id),
+      supabase.from('users').select('*, parent:parent_id(id, first_name, last_name)').eq('id', id).single(),
+      supabase.from('users').select('id, first_name, last_name, date_of_birth, status').eq('parent_id', id),
       supabase.from('enrollments').select('*, course:course_id(name, sport, schedule)').eq('member_id', id),
-      supabase.from('persone').select('id, first_name, last_name, is_minor'),
+      supabase.from('users').select('id, first_name, last_name, is_minor'),
     ])
     if (memberRes.data) setMember(memberRes.data)
     setChildren(childrenRes.data || [])
