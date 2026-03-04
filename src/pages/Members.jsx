@@ -49,7 +49,7 @@ export default function Members() {
     setLoading(true)
     const { data, error } = await supabase
       .from('users')
-      .select('*, parent:parent_id(id, first_name, last_name)')
+      .select('id, first_name, last_name, email, fiscal_code, membership_number, member_type, date_of_birth, is_minor, status, medical_certificate_expiry, phone, gender, address, city, zip_code, province, notes, medical_certificate_type, created_at, parent_id, parent:parent_id(id, first_name, last_name)')
       .eq('is_member', true)
       .order('last_name')
     if (!error) setMembers(data || [])
@@ -371,6 +371,10 @@ function ImportAtletiModal({ onDone, onCancel }) {
       const totalRows = lines.length - 1
       setProgress({ current: 0, total: totalRows })
 
+      const BATCH_SIZE = 20
+      let batch = []
+      let batchRowNumbers = []
+
       for (let i = 1; i < lines.length; i++) {
         const vals = lines[i].split(sep).map(v => v.replace(/^"|"$/g, '').trim())
         const row = {}
@@ -381,21 +385,30 @@ function ImportAtletiModal({ onDone, onCancel }) {
 
         if (!row.first_name && !row.last_name) {
           errorsList.push({ row: i + 1, message: 'Nome e cognome mancanti' })
-          setProgress(prev => ({ ...prev, current: i }))
           continue
         }
 
         row.is_member = true
         row.status = row.status || 'attivo'
+        batch.push(row)
+        batchRowNumbers.push(i + 1)
 
-        const { error } = await supabase.from('users').insert(row)
-        if (error) {
-          errorsList.push({ row: i + 1, message: error.message })
-        } else {
-          imported++
+        if (batch.length >= BATCH_SIZE || i === lines.length - 1) {
+          const { error } = await supabase.from('users').insert(batch)
+          if (error) {
+            // If batch fails, try individually to identify bad rows
+            for (let j = 0; j < batch.length; j++) {
+              const { error: rowErr } = await supabase.from('users').insert(batch[j])
+              if (rowErr) errorsList.push({ row: batchRowNumbers[j], message: rowErr.message })
+              else imported++
+            }
+          } else {
+            imported += batch.length
+          }
+          batch = []
+          batchRowNumbers = []
+          setProgress({ current: i, total: totalRows })
         }
-
-        setProgress({ current: i, total: totalRows })
       }
     } catch (err) {
       errorsList.push({ row: 0, message: err.message })

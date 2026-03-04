@@ -20,20 +20,35 @@ export default function Dashboard() {
 
   async function fetchDashboard() {
     setLoading(true)
+    const today = new Date()
+    const todayStr = today.toISOString().split('T')[0]
+    const todayMonth = String(today.getMonth() + 1).padStart(2, '0')
+    const todayDay = String(today.getDate()).padStart(2, '0')
+
     const [
       membersRes,
+      recentMembersRes,
+      expiringCertsRes,
+      birthdayRes,
       coursesRes,
       enrollmentsRes,
       contactsRes,
       ordersRes,
       competitionsRes,
     ] = await Promise.all([
-      supabase.from('users').select('*').eq('is_member', true),
+      // Only fetch fields needed for stats
+      supabase.from('users').select('id, status, is_minor, medical_certificate_expiry').eq('is_member', true),
+      // Recent 5 members
+      supabase.from('users').select('id, first_name, last_name, email, status, created_at').eq('is_member', true).order('created_at', { ascending: false }).limit(5),
+      // Expiring certs (next 30 days + already expired)
+      supabase.from('users').select('id, first_name, last_name, medical_certificate_expiry').eq('is_member', true).not('medical_certificate_expiry', 'is', null).lte('medical_certificate_expiry', new Date(today.getTime() + 30 * 86400000).toISOString().split('T')[0]).order('medical_certificate_expiry').limit(10),
+      // Today birthdays
+      supabase.from('users').select('id, first_name, last_name, date_of_birth').eq('is_member', true).like('date_of_birth', `%-${todayMonth}-${todayDay}`),
       supabase.from('courses').select('id, is_active'),
       supabase.from('enrollments').select('id, status'),
       supabase.from('users').select('id, contact_status').eq('is_member', false),
       supabase.from('clothing_orders').select('*, member:member_id(first_name, last_name), item:item_id(name)').in('status', ['richiesto', 'ordinato']).order('ordered_at', { ascending: false }).limit(5),
-      supabase.from('competitions').select('id, name, competition_date, status, location, city, sport').gte('competition_date', new Date().toISOString().split('T')[0]).order('competition_date').limit(5),
+      supabase.from('competitions').select('id, name, competition_date, status, location, city, sport').gte('competition_date', todayStr).order('competition_date').limit(5),
     ])
 
     const members = membersRes.data || []
@@ -52,29 +67,16 @@ export default function Dashboard() {
       expiringSoon: members.filter(m => isCertificateExpiringSoon(m.medical_certificate_expiry)).length,
     })
 
-    setRecentMembers(
-      [...members].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 5)
-    )
+    setRecentMembers(recentMembersRes.data || [])
 
+    const certData = expiringCertsRes.data || []
     setExpiringCerts(
-      members
+      certData
         .filter(m => isCertificateExpired(m.medical_certificate_expiry) || isCertificateExpiringSoon(m.medical_certificate_expiry))
-        .sort((a, b) => new Date(a.medical_certificate_expiry) - new Date(b.medical_certificate_expiry))
         .slice(0, 5)
     )
 
-    // Compleanni di oggi
-    const today = new Date()
-    const todayMonth = today.getMonth() + 1
-    const todayDay = today.getDate()
-    setTodayBirthdays(
-      members.filter(m => {
-        if (!m.date_of_birth) return false
-        const [, month, day] = m.date_of_birth.split('-').map(Number)
-        return month === todayMonth && day === todayDay
-      })
-    )
-
+    setTodayBirthdays(birthdayRes.data || [])
     setPendingOrders(ordersRes.data || [])
     setUpcomingCompetitions(competitionsRes.data || [])
     setLoading(false)
