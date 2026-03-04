@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { Plus, Megaphone, UserPlus, Phone, Mail, LayoutList, Columns3 } from 'lucide-react'
+import { useEffect, useState, useRef } from 'react'
+import { Plus, Megaphone, UserPlus, Phone, Mail, LayoutList, Columns3, Upload, Download, FileDown, CheckCircle2, AlertCircle } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { formatDate, formatDateTime } from '../lib/utils'
 import Badge from '../components/ui/Badge'
@@ -7,6 +7,17 @@ import SearchInput from '../components/ui/SearchInput'
 import EmptyState from '../components/ui/EmptyState'
 import Modal from '../components/ui/Modal'
 import ConfirmDialog from '../components/ui/ConfirmDialog'
+
+const IMPORT_CONTACT_COLUMNS = [
+  { header: 'Cognome', field: 'last_name' },
+  { header: 'Nome', field: 'first_name' },
+  { header: 'Email', field: 'email' },
+  { header: 'Telefono', field: 'phone' },
+  { header: 'Fonte', field: 'source' },
+  { header: 'Interesse', field: 'interest' },
+  { header: 'Stato', field: 'contact_status' },
+  { header: 'Note', field: 'notes' },
+]
 
 const SOURCES = ['Sito web', 'Passaparola', 'Evento', 'Social', 'Volantino', 'Altro']
 const STATUSES = ['tutti', 'nuovo', 'contattato', 'interessato', 'convertito', 'perso']
@@ -29,6 +40,7 @@ export default function Marketing() {
   const [convertTarget, setConvertTarget] = useState(null)
   const [showEmail, setShowEmail] = useState(false)
   const [viewMode, setViewMode] = useState('list') // 'list' | 'board'
+  const [showImportModal, setShowImportModal] = useState(false)
 
   useEffect(() => { fetchContacts() }, [])
 
@@ -69,6 +81,19 @@ export default function Marketing() {
     return matchesSearch && matchesStatus
   })
 
+  function handleExport() {
+    const headers = IMPORT_CONTACT_COLUMNS.map(c => c.header)
+    const rows = contacts.map(c => IMPORT_CONTACT_COLUMNS.map(col => c[col.field] || ''))
+    const csv = [headers.join(';'), ...rows.map(r => r.map(v => `"${(v || '').toString().replace(/"/g, '""')}"`).join(';'))].join('\n')
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `contatti_${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   const stats = {
     total: contacts.length,
     new: contacts.filter(c => c.contact_status === 'nuovo').length,
@@ -86,6 +111,18 @@ export default function Marketing() {
           </p>
         </div>
         <div className="flex gap-2">
+          <button
+            onClick={handleExport}
+            className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
+            <Download size={16} /> Esporta
+          </button>
+          <button
+            onClick={() => setShowImportModal(true)}
+            className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
+            <Upload size={16} /> Importa CSV
+          </button>
           <button
             onClick={() => setShowEmail(true)}
             className="inline-flex items-center gap-2 rounded-lg border border-primary-600 px-4 py-2.5 text-sm font-medium text-primary-600 hover:bg-primary-50"
@@ -286,6 +323,13 @@ export default function Marketing() {
         <EmailCompose contacts={filtered.filter(c => c.email)} onClose={() => setShowEmail(false)} />
       </Modal>
 
+      <Modal open={showImportModal} onClose={() => setShowImportModal(false)} title="Importa Contatti da CSV" size="lg">
+        <ImportContattiModal
+          onDone={() => { setShowImportModal(false); fetchContacts() }}
+          onCancel={() => setShowImportModal(false)}
+        />
+      </Modal>
+
       <Modal open={showForm} onClose={() => setShowForm(false)} title={editing ? 'Modifica Contatto' : 'Nuovo Contatto'} size="md">
         <ContactForm contact={editing} onSaved={() => { setShowForm(false); fetchContacts() }} onCancel={() => setShowForm(false)} />
       </Modal>
@@ -408,6 +452,187 @@ function ContactForm({ contact, onSaved, onCancel }) {
         </button>
       </div>
     </form>
+  )
+}
+
+function ImportContattiModal({ onDone, onCancel }) {
+  const fileInputRef = useRef()
+  const [step, setStep] = useState('upload') // upload | importing | done
+  const [progress, setProgress] = useState({ current: 0, total: 0 })
+  const [results, setResults] = useState({ imported: 0, errors: [] })
+
+  function handleDownloadTemplate() {
+    const headers = IMPORT_CONTACT_COLUMNS.map(c => c.header)
+    const exampleRow = ['Rossi', 'Maria', 'maria@email.com', '3331234567', 'Evento', 'Nuoto', 'nuovo', '']
+    const csv = [headers.join(';'), exampleRow.map(v => `"${v}"`).join(';')].join('\n')
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'template_contatti.csv'
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  async function handleFileSelected(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setStep('importing')
+    const errorsList = []
+    let imported = 0
+
+    try {
+      const text = await file.text()
+      const lines = text.split(/\r?\n/).filter(l => l.trim())
+      if (lines.length < 2) {
+        setResults({ imported: 0, errors: [{ row: 0, message: 'Il file deve avere almeno una riga di intestazione e una di dati' }] })
+        setStep('done')
+        return
+      }
+
+      const sep = lines[0].includes(';') ? ';' : ','
+      const headers = lines[0].split(sep).map(h => h.replace(/^"|"$/g, '').trim().toLowerCase())
+
+      const colMap = {}
+      for (const col of IMPORT_CONTACT_COLUMNS) {
+        colMap[col.header.toLowerCase()] = col.field
+      }
+      colMap['cognome'] = 'last_name'
+      colMap['nome'] = 'first_name'
+      colMap['telefono'] = 'phone'
+      colMap['fonte'] = 'source'
+      colMap['interesse'] = 'interest'
+      colMap['stato'] = 'contact_status'
+      colMap['note'] = 'notes'
+
+      const totalRows = lines.length - 1
+      setProgress({ current: 0, total: totalRows })
+
+      for (let i = 1; i < lines.length; i++) {
+        const vals = lines[i].split(sep).map(v => v.replace(/^"|"$/g, '').trim())
+        const row = {}
+        headers.forEach((h, idx) => {
+          const field = colMap[h]
+          if (field && vals[idx]) row[field] = vals[idx]
+        })
+
+        if (!row.first_name && !row.last_name) {
+          errorsList.push({ row: i + 1, message: 'Nome e cognome mancanti' })
+          setProgress(prev => ({ ...prev, current: i }))
+          continue
+        }
+
+        row.is_member = false
+        row.contact_status = row.contact_status || 'nuovo'
+        row.status = 'attivo'
+
+        const { error } = await supabase.from('users').insert(row)
+        if (error) {
+          errorsList.push({ row: i + 1, message: error.message })
+        } else {
+          imported++
+        }
+
+        setProgress({ current: i, total: totalRows })
+      }
+    } catch (err) {
+      errorsList.push({ row: 0, message: err.message })
+    }
+
+    setResults({ imported, errors: errorsList })
+    setStep('done')
+  }
+
+  const progressPercent = progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0
+
+  return (
+    <div className="space-y-4">
+      {step === 'upload' && (
+        <>
+          <p className="text-sm text-gray-600">
+            Importa i contatti da un file CSV. Scarica prima il template per vedere il formato corretto delle colonne.
+          </p>
+          <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-6 text-center">
+            <button
+              onClick={handleDownloadTemplate}
+              className="mb-4 inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              <FileDown size={16} /> Scarica Template CSV
+            </button>
+            <div className="text-sm text-gray-500 mb-4">
+              <p>Colonne supportate:</p>
+              <p className="text-xs text-gray-400 mt-1">{IMPORT_CONTACT_COLUMNS.map(c => c.header).join(' | ')}</p>
+            </div>
+            <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-700">
+              <Upload size={16} /> Seleziona file CSV
+              <input ref={fileInputRef} type="file" accept=".csv,.txt" onChange={handleFileSelected} className="hidden" />
+            </label>
+          </div>
+          <div className="flex justify-end">
+            <button onClick={onCancel} className="rounded-lg border border-gray-300 px-4 py-2 text-sm">Annulla</button>
+          </div>
+        </>
+      )}
+
+      {step === 'importing' && (
+        <div className="space-y-4">
+          <p className="text-sm font-medium text-gray-700">Importazione in corso...</p>
+          <div className="w-full rounded-full bg-gray-200">
+            <div
+              className="h-3 rounded-full bg-primary-600 transition-all duration-300"
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+          <p className="text-sm text-gray-500 text-center">
+            {progress.current} / {progress.total} righe elaborate ({progressPercent}%)
+          </p>
+        </div>
+      )}
+
+      {step === 'done' && (
+        <div className="space-y-4">
+          <div className="flex items-center gap-3 rounded-lg bg-green-50 p-4">
+            <CheckCircle2 size={20} className="text-green-600" />
+            <div>
+              <p className="text-sm font-medium text-green-800">
+                Importazione completata: {results.imported} contatti importati
+              </p>
+              {results.errors.length > 0 && (
+                <p className="text-sm text-red-600">{results.errors.length} errori riscontrati</p>
+              )}
+            </div>
+          </div>
+
+          {results.errors.length > 0 && (
+            <div className="max-h-48 overflow-y-auto rounded-lg border border-red-200 bg-red-50">
+              <div className="p-3">
+                <p className="mb-2 text-sm font-medium text-red-800">Dettaglio errori:</p>
+                <div className="space-y-1">
+                  {results.errors.map((err, idx) => (
+                    <div key={idx} className="flex items-start gap-2 text-xs text-red-700">
+                      <AlertCircle size={14} className="mt-0.5 shrink-0" />
+                      <span>
+                        {err.row > 0 ? `Riga ${err.row}: ` : ''}{err.message}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="flex justify-end">
+            <button
+              onClick={onDone}
+              className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700"
+            >
+              Chiudi
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
 
