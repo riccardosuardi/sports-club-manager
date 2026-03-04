@@ -21,7 +21,11 @@ export function AuthProvider({ children }) {
   }
 
   useEffect(() => {
+    // Timeout di sicurezza: se Supabase non risponde entro 5s, sblocca l'app
+    const timeout = setTimeout(() => setLoading(false), 5000)
+
     supabase.auth.getSession().then(({ data: { session } }) => {
+      clearTimeout(timeout)
       setUser(session?.user ?? null)
       if (session?.user) {
         fetchProfile(session.user.id).finally(() => setLoading(false))
@@ -29,6 +33,7 @@ export function AuthProvider({ children }) {
         setLoading(false)
       }
     }).catch(() => {
+      clearTimeout(timeout)
       setLoading(false)
     })
 
@@ -44,7 +49,10 @@ export function AuthProvider({ children }) {
       }
     )
 
-    return () => subscription.unsubscribe()
+    return () => {
+      clearTimeout(timeout)
+      subscription.unsubscribe()
+    }
   }, [])
 
   async function signIn(email, password) {
