@@ -1,11 +1,15 @@
 import { useEffect, useState } from 'react'
-import { Plus, GraduationCap, Users, Clock, MapPin } from 'lucide-react'
+import { Plus, GraduationCap, Users, Calendar, ChevronLeft, ChevronRight, List, Eye, Pencil, Trash2, UserPlus } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, getDay, addMonths, subMonths, isSameDay, isToday } from 'date-fns'
+import { it } from 'date-fns/locale'
 import Badge from '../components/ui/Badge'
 import SearchInput from '../components/ui/SearchInput'
 import EmptyState from '../components/ui/EmptyState'
 import Modal from '../components/ui/Modal'
 import ConfirmDialog from '../components/ui/ConfirmDialog'
+
+const WEEKDAYS = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom']
 
 export default function Courses() {
   const [courses, setCourses] = useState([])
@@ -19,6 +23,8 @@ export default function Courses() {
   const [selectedCourse, setSelectedCourse] = useState(null)
   const [showEnroll, setShowEnroll] = useState(false)
   const [enrollMemberId, setEnrollMemberId] = useState('')
+  const [viewMode, setViewMode] = useState('list')
+  const [currentMonth, setCurrentMonth] = useState(new Date())
 
   useEffect(() => { fetchData() }, [])
 
@@ -54,7 +60,7 @@ export default function Courses() {
   }
 
   const filtered = courses.filter((c) =>
-    !search || c.name.toLowerCase().includes(search.toLowerCase()) || (c.sport || '').toLowerCase().includes(search.toLowerCase())
+    !search || c.name.toLowerCase().includes(search.toLowerCase())
   )
 
   function getEnrollmentCount(courseId) {
@@ -63,6 +69,21 @@ export default function Courses() {
 
   function getCourseEnrollments(courseId) {
     return enrollments.filter((e) => e.course_id === courseId)
+  }
+
+  // Calendar helpers
+  const monthStart = startOfMonth(currentMonth)
+  const monthEnd = endOfMonth(currentMonth)
+  const calendarDays = eachDayOfInterval({ start: monthStart, end: monthEnd })
+  const startDayOffset = (getDay(monthStart) + 6) % 7
+
+  function getCoursesForDay(day) {
+    return courses.filter((c) => {
+      if (!c.start_date) return false
+      const start = parseISO(c.start_date)
+      const end = c.end_date ? parseISO(c.end_date) : start
+      return (day >= start && day <= end) || isSameDay(day, start)
+    })
   }
 
   return (
@@ -80,63 +101,147 @@ export default function Courses() {
         </button>
       </div>
 
-      <div className="sm:w-80">
-        <SearchInput value={search} onChange={setSearch} placeholder="Cerca corsi..." />
+      {/* View toggle + search */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex gap-2">
+          <button
+            onClick={() => setViewMode('list')}
+            className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium ${viewMode === 'list' ? 'bg-primary-100 text-primary-700' : 'text-gray-500 hover:bg-gray-100'}`}
+          >
+            <List size={16} /> Lista
+          </button>
+          <button
+            onClick={() => setViewMode('calendar')}
+            className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium ${viewMode === 'calendar' ? 'bg-primary-100 text-primary-700' : 'text-gray-500 hover:bg-gray-100'}`}
+          >
+            <Calendar size={16} /> Calendario
+          </button>
+        </div>
+        <div className="sm:w-80">
+          <SearchInput value={search} onChange={setSearch} placeholder="Cerca corsi..." />
+        </div>
       </div>
 
       {loading ? (
         <div className="py-12 text-center text-gray-500">Caricamento...</div>
+      ) : viewMode === 'calendar' ? (
+        /* Calendar view */
+        <div className="rounded-lg border border-gray-200 bg-white">
+          <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+            <button onClick={() => setCurrentMonth(subMonths(currentMonth, 1))} className="rounded-lg p-2 hover:bg-gray-100">
+              <ChevronLeft size={20} />
+            </button>
+            <h2 className="text-lg font-semibold capitalize text-gray-900">
+              {format(currentMonth, 'MMMM yyyy', { locale: it })}
+            </h2>
+            <button onClick={() => setCurrentMonth(addMonths(currentMonth, 1))} className="rounded-lg p-2 hover:bg-gray-100">
+              <ChevronRight size={20} />
+            </button>
+          </div>
+          <div className="grid grid-cols-7 border-b border-gray-200">
+            {WEEKDAYS.map((day) => (
+              <div key={day} className="py-2 text-center text-xs font-medium uppercase text-gray-500">{day}</div>
+            ))}
+          </div>
+          <div className="grid grid-cols-7">
+            {Array.from({ length: startDayOffset }).map((_, i) => (
+              <div key={`empty-${i}`} className="min-h-24 border-b border-r border-gray-100 bg-gray-50 p-1" />
+            ))}
+            {calendarDays.map((day) => {
+              const dayC = getCoursesForDay(day)
+              const today = isToday(day)
+              return (
+                <div key={day.toISOString()} className={`min-h-24 border-b border-r border-gray-100 p-1 ${today ? 'bg-primary-50' : ''}`}>
+                  <div className={`mb-1 text-right text-xs font-medium ${today ? 'text-primary-700' : 'text-gray-500'}`}>
+                    {format(day, 'd')}
+                  </div>
+                  <div className="space-y-0.5">
+                    {dayC.slice(0, 3).map((c) => (
+                      <div
+                        key={c.id}
+                        className={`block w-full truncate rounded px-1 py-0.5 text-left text-xs font-medium ${
+                          c.is_youth ? 'bg-blue-100 text-blue-800' : 'bg-primary-100 text-primary-800'
+                        }`}
+                        title={c.name}
+                      >
+                        {c.name}
+                      </div>
+                    ))}
+                    {dayC.length > 3 && <div className="text-xs text-gray-500">+{dayC.length - 3} altri</div>}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
       ) : filtered.length === 0 ? (
         <EmptyState icon={GraduationCap} title="Nessun corso trovato" description="Crea il primo corso" />
       ) : (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {filtered.map((course) => {
-            const count = getEnrollmentCount(course.id)
-            return (
-              <div key={course.id} className="rounded-lg border border-gray-200 bg-white p-5">
-                <div className="mb-3 flex items-start justify-between">
-                  <div>
-                    <h3 className="font-semibold text-gray-900">{course.name}</h3>
-                    {course.sport && <p className="text-xs text-gray-500">{course.sport}</p>}
-                  </div>
-                  <div className="flex gap-1.5">
-                    {course.is_youth && (
-                      <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">Giovanile</span>
-                    )}
-                    <Badge status={course.is_active ? 'attivo' : 'sospeso'}>
-                      {course.is_active ? 'Attivo' : 'Inattivo'}
-                    </Badge>
-                  </div>
-                </div>
-
-                {course.description && <p className="mb-3 text-sm text-gray-600">{course.description}</p>}
-
-                <div className="mb-4 space-y-1.5 text-sm text-gray-500">
-                  {course.schedule && (
-                    <div className="flex items-center gap-2"><Clock size={14} /> {course.schedule}</div>
-                  )}
-                  {course.location && (
-                    <div className="flex items-center gap-2"><MapPin size={14} /> {course.location}</div>
-                  )}
-                  {course.instructor_name && (
-                    <div className="flex items-center gap-2"><Users size={14} /> {course.instructor_name}</div>
-                  )}
-                  <div className="flex items-center gap-2">
-                    <Users size={14} />
-                    {count}{course.max_participants ? ` / ${course.max_participants}` : ''} iscritti
-                  </div>
-                  {course.price && <p className="text-sm font-medium text-gray-700">&euro; {Number(course.price).toFixed(2)}</p>}
-                </div>
-
-                <div className="flex flex-wrap gap-2 border-t pt-3">
-                  <button onClick={() => { setSelectedCourse(course); setShowEnroll(true) }} className="text-xs text-primary-600 hover:text-primary-700">Iscrivi atleta</button>
-                  <button onClick={() => setSelectedCourse(course)} className="text-xs text-gray-600 hover:text-gray-700">Iscritti</button>
-                  <button onClick={() => { setEditing(course); setShowForm(true) }} className="text-xs text-gray-600 hover:text-gray-700">Modifica</button>
-                  <button onClick={() => setDeleteTarget(course)} className="text-xs text-red-600 hover:text-red-700">Elimina</button>
-                </div>
-              </div>
-            )
-          })}
+        /* List view */
+        <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Corso</th>
+                <th className="hidden px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 md:table-cell">Periodo</th>
+                <th className="hidden px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 md:table-cell">Iscritti</th>
+                <th className="hidden px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 md:table-cell">Prezzo</th>
+                <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Stato</th>
+                <th className="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500">Azioni</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200">
+              {filtered.map((course) => {
+                const count = getEnrollmentCount(course.id)
+                return (
+                  <tr key={course.id} className="hover:bg-gray-50">
+                    <td className="whitespace-nowrap px-4 py-3">
+                      <div>
+                        <p className="font-medium text-gray-900">{course.name}</p>
+                        {course.description && <p className="text-xs text-gray-500 truncate max-w-xs">{course.description}</p>}
+                      </div>
+                    </td>
+                    <td className="hidden whitespace-nowrap px-4 py-3 text-sm text-gray-600 md:table-cell">
+                      {course.start_date ? format(parseISO(course.start_date), 'dd/MM/yyyy', { locale: it }) : '-'}
+                      {course.end_date && course.end_date !== course.start_date && ` - ${format(parseISO(course.end_date), 'dd/MM/yyyy', { locale: it })}`}
+                    </td>
+                    <td className="hidden whitespace-nowrap px-4 py-3 text-sm text-gray-600 md:table-cell">
+                      {count}{course.max_participants ? ` / ${course.max_participants}` : ''}
+                    </td>
+                    <td className="hidden whitespace-nowrap px-4 py-3 text-sm text-gray-600 md:table-cell">
+                      {course.price ? `€ ${Number(course.price).toFixed(2)}` : '-'}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3">
+                      <div className="flex gap-1.5">
+                        {course.is_youth && (
+                          <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">Giovanile</span>
+                        )}
+                        <Badge status={course.is_active ? 'attivo' : 'sospeso'}>
+                          {course.is_active ? 'Attivo' : 'Inattivo'}
+                        </Badge>
+                      </div>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-right">
+                      <div className="flex justify-end gap-1">
+                        <button onClick={() => { setSelectedCourse(course); setShowEnroll(true) }} className="rounded-lg p-1.5 text-primary-600 hover:bg-primary-50" title="Iscrivi atleta">
+                          <UserPlus size={16} />
+                        </button>
+                        <button onClick={() => setSelectedCourse(course)} className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100" title="Vedi iscritti">
+                          <Eye size={16} />
+                        </button>
+                        <button onClick={() => { setEditing(course); setShowForm(true) }} className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100" title="Modifica">
+                          <Pencil size={16} />
+                        </button>
+                        <button onClick={() => setDeleteTarget(course)} className="rounded-lg p-1.5 text-red-500 hover:bg-red-50" title="Elimina">
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
         </div>
       )}
 
@@ -153,7 +258,9 @@ export default function Courses() {
                     <p className="text-sm font-medium">{e.member?.first_name} {e.member?.last_name}</p>
                     <Badge status={e.status} />
                   </div>
-                  <button onClick={() => handleRemoveEnrollment(e.id)} className="text-xs text-red-600">Rimuovi</button>
+                  <button onClick={() => handleRemoveEnrollment(e.id)} className="rounded-lg p-1.5 text-red-500 hover:bg-red-50" title="Rimuovi">
+                    <Trash2 size={16} />
+                  </button>
                 </div>
               ))}
             </div>
@@ -205,12 +312,9 @@ function CourseForm({ course, onSaved, onCancel }) {
   const [form, setForm] = useState({
     name: course?.name || '',
     description: course?.description || '',
-    sport: course?.sport || '',
-    instructor_name: course?.instructor_name || '',
-    schedule: course?.schedule || '',
-    location: course?.location || '',
+    start_date: course?.start_date || '',
+    end_date: course?.end_date || '',
     max_participants: course?.max_participants || '',
-    season: course?.season || '',
     price: course?.price || '',
     is_active: course?.is_active ?? true,
     is_youth: course?.is_youth ?? false,
@@ -259,28 +363,16 @@ function CourseForm({ course, onSaved, onCancel }) {
           <input type="text" value={form.name} onChange={(e) => set('name', e.target.value)} required className={inputClass} />
         </div>
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Sport</label>
-          <input type="text" value={form.sport || ''} onChange={(e) => set('sport', e.target.value)} className={inputClass} />
+          <label className="mb-1 block text-sm font-medium text-gray-700">Data Inizio</label>
+          <input type="date" value={form.start_date || ''} onChange={(e) => set('start_date', e.target.value)} className={inputClass} />
         </div>
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Istruttore</label>
-          <input type="text" value={form.instructor_name || ''} onChange={(e) => set('instructor_name', e.target.value)} className={inputClass} />
-        </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Orario</label>
-          <input type="text" value={form.schedule || ''} onChange={(e) => set('schedule', e.target.value)} placeholder="Es. Lun/Mer 17:00-18:30" className={inputClass} />
-        </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Luogo</label>
-          <input type="text" value={form.location || ''} onChange={(e) => set('location', e.target.value)} className={inputClass} />
+          <label className="mb-1 block text-sm font-medium text-gray-700">Data Fine</label>
+          <input type="date" value={form.end_date || ''} onChange={(e) => set('end_date', e.target.value)} className={inputClass} />
         </div>
         <div>
           <label className="mb-1 block text-sm font-medium text-gray-700">Max Partecipanti</label>
           <input type="number" value={form.max_participants || ''} onChange={(e) => set('max_participants', e.target.value)} className={inputClass} />
-        </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Stagione</label>
-          <input type="text" value={form.season || ''} onChange={(e) => set('season', e.target.value)} placeholder="Es. 2025/2026" className={inputClass} />
         </div>
         <div>
           <label className="mb-1 block text-sm font-medium text-gray-700">Prezzo (&euro;)</label>
@@ -291,9 +383,17 @@ function CourseForm({ course, onSaved, onCancel }) {
           <textarea value={form.description || ''} onChange={(e) => set('description', e.target.value)} rows={3} className={inputClass} />
         </div>
         <div>
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={form.is_active} onChange={(e) => set('is_active', e.target.checked)} className="rounded border-gray-300 text-primary-600" />
-            <span>Corso attivo</span>
+          <label className="flex items-center gap-3 text-sm">
+            <span className="font-medium text-gray-700">Corso attivo</span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={form.is_active}
+              onClick={() => set('is_active', !form.is_active)}
+              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${form.is_active ? 'bg-primary-600' : 'bg-gray-200'}`}
+            >
+              <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition-transform ${form.is_active ? 'translate-x-5' : 'translate-x-0'}`} />
+            </button>
           </label>
         </div>
         <div>

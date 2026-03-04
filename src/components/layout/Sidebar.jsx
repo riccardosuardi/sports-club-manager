@@ -9,7 +9,7 @@ import {
   Settings,
   Trophy,
   Calendar,
-  Baby,
+  Shapes,
   X,
   ChevronDown,
   Contact,
@@ -26,7 +26,7 @@ const navigation = [
   { name: 'Abbigliamento', to: '/abbigliamento', icon: Shirt },
   {
     name: 'Attività Giovanile',
-    icon: Baby,
+    icon: Shapes,
     children: [
       { name: 'Atleti', to: '/attivita-giovanile/atleti' },
       { name: 'Genitori', to: '/attivita-giovanile/genitori' },

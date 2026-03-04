@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Users, AlertTriangle, UserCheck, UserX } from 'lucide-react'
+import { Plus, Users, AlertTriangle, Upload, Download, Eye, Pencil, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { formatDate, isCertificateExpired, isCertificateExpiringSoon, getFullName, calculateAge } from '../lib/utils'
 import Badge from '../components/ui/Badge'
@@ -12,6 +12,7 @@ import MemberForm from '../components/members/MemberForm'
 
 export default function Members() {
   const navigate = useNavigate()
+  const fileInputRef = useRef()
   const [members, setMembers] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -19,6 +20,8 @@ export default function Members() {
   const [showForm, setShowForm] = useState(false)
   const [editingMember, setEditingMember] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
+  const [importing, setImporting] = useState(false)
+  const [importResult, setImportResult] = useState(null)
 
   useEffect(() => {
     fetchMembers()
@@ -38,6 +41,77 @@ export default function Members() {
   async function handleDelete(id) {
     await supabase.from('users').delete().eq('id', id)
     fetchMembers()
+  }
+
+  function handleExport() {
+    const headers = ['Cognome', 'Nome', 'Codice Fiscale', 'Data Nascita', 'Genere', 'Tipologia', 'Tessera', 'Email', 'Telefono', 'Indirizzo', 'Città', 'CAP', 'Provincia', 'Stato', 'Scadenza Cert. Medico', 'Tipo Cert. Medico', 'Note']
+    const rows = members.map(m => [
+      m.last_name || '', m.first_name || '', m.fiscal_code || '', m.date_of_birth || '',
+      m.gender || '', m.member_type || '', m.membership_number || '', m.email || '',
+      m.phone || '', m.address || '', m.city || '', m.zip_code || '', m.province || '',
+      m.status || '', m.medical_certificate_expiry || '', m.medical_certificate_type || '', m.notes || '',
+    ])
+    const csv = [headers.join(';'), ...rows.map(r => r.map(v => `"${(v || '').replace(/"/g, '""')}"`).join(';'))].join('\n')
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `atleti_${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  async function handleBulkImport(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setImporting(true)
+    setImportResult(null)
+
+    try {
+      const text = await file.text()
+      const lines = text.split(/\r?\n/).filter(l => l.trim())
+      if (lines.length < 2) throw new Error('Il file deve avere almeno una riga di intestazione e una di dati')
+
+      const sep = lines[0].includes(';') ? ';' : ','
+      const headers = lines[0].split(sep).map(h => h.replace(/^"|"$/g, '').trim().toLowerCase())
+
+      const colMap = {
+        cognome: 'last_name', nome: 'first_name', 'codice fiscale': 'fiscal_code',
+        'data nascita': 'date_of_birth', genere: 'gender', tipologia: 'member_type',
+        tessera: 'membership_number', email: 'email', telefono: 'phone',
+        indirizzo: 'address', 'città': 'city', cap: 'zip_code', provincia: 'province',
+        stato: 'status', note: 'notes',
+      }
+
+      let imported = 0
+      let errors = 0
+
+      for (let i = 1; i < lines.length; i++) {
+        const vals = lines[i].split(sep).map(v => v.replace(/^"|"$/g, '').trim())
+        const row = {}
+        headers.forEach((h, idx) => {
+          const field = colMap[h]
+          if (field && vals[idx]) row[field] = vals[idx]
+        })
+
+        if (!row.first_name && !row.last_name) { errors++; continue }
+
+        row.is_member = true
+        row.status = row.status || 'attivo'
+
+        const { error } = await supabase.from('users').insert(row)
+        if (error) errors++
+        else imported++
+      }
+
+      setImportResult({ imported, errors })
+      fetchMembers()
+    } catch (err) {
+      setImportResult({ imported: 0, errors: 0, message: err.message })
+    } finally {
+      setImporting(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
   }
 
   const filtered = members.filter((m) => {
@@ -64,13 +138,36 @@ export default function Members() {
           <h1 className="text-2xl font-bold text-gray-900">Atleti</h1>
           <p className="text-sm text-gray-500">{stats.total} atleti registrati, {stats.active} attivi</p>
         </div>
-        <button
-          onClick={() => { setEditingMember(null); setShowForm(true) }}
-          className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-700"
-        >
-          <Plus size={18} /> Nuovo Atleta
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={handleExport}
+            className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
+            <Download size={16} /> Esporta
+          </button>
+          <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+            <Upload size={16} /> {importing ? 'Importazione...' : 'Importa CSV'}
+            <input ref={fileInputRef} type="file" accept=".csv,.txt" onChange={handleBulkImport} className="hidden" disabled={importing} />
+          </label>
+          <button
+            onClick={() => { setEditingMember(null); setShowForm(true) }}
+            className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-700"
+          >
+            <Plus size={18} /> Nuovo Atleta
+          </button>
+        </div>
       </div>
+
+      {/* Risultato importazione */}
+      {importResult && (
+        <div className={`rounded-lg p-3 text-sm ${importResult.message ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>
+          {importResult.message
+            ? `Errore: ${importResult.message}`
+            : `Importazione completata: ${importResult.imported} atleti importati${importResult.errors > 0 ? `, ${importResult.errors} errori` : ''}`
+          }
+          <button onClick={() => setImportResult(null)} className="ml-2 underline">Chiudi</button>
+        </div>
+      )}
 
       {/* Avvisi certificati */}
       {(stats.expiredCerts > 0 || stats.expiringSoon > 0) && (
@@ -167,7 +264,7 @@ export default function Members() {
                     </td>
                     <td className="hidden whitespace-nowrap px-4 py-3 text-sm text-gray-600 md:table-cell">
                       {age !== null ? `${age} anni` : '-'}
-                      {member.is_minor && <span className="ml-1 text-xs text-orange-600">(minore)</span>}
+                      {member.is_minor && <span className="ml-1 text-xs text-blue-600">(giovanile)</span>}
                     </td>
                     <td className="hidden whitespace-nowrap px-4 py-3 text-sm text-gray-600 lg:table-cell">
                       {member.parent ? getFullName(member.parent) : '-'}
@@ -187,24 +284,27 @@ export default function Members() {
                       )}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-right">
-                      <div className="flex justify-end gap-2">
+                      <div className="flex justify-end gap-1">
                         <button
                           onClick={() => navigate(`/atleti/${member.id}`)}
-                          className="text-sm text-primary-600 hover:text-primary-700"
+                          className="rounded-lg p-1.5 text-primary-600 hover:bg-primary-50"
+                          title="Dettagli"
                         >
-                          Dettagli
+                          <Eye size={16} />
                         </button>
                         <button
                           onClick={() => { setEditingMember(member); setShowForm(true) }}
-                          className="text-sm text-gray-600 hover:text-gray-700"
+                          className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100"
+                          title="Modifica"
                         >
-                          Modifica
+                          <Pencil size={16} />
                         </button>
                         <button
                           onClick={() => setDeleteTarget(member)}
-                          className="text-sm text-red-600 hover:text-red-700"
+                          className="rounded-lg p-1.5 text-red-500 hover:bg-red-50"
+                          title="Elimina"
                         >
-                          Elimina
+                          <Trash2 size={16} />
                         </button>
                       </div>
                     </td>

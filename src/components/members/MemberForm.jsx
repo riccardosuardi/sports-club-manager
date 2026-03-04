@@ -45,10 +45,15 @@ export default function MemberForm({ member, members = [], onSaved, onCancel }) 
   async function handleSubmit(e) {
     e.preventDefault()
     setError('')
+
+    if (!form.member_type) {
+      setError('La tipologia atleta è obbligatoria')
+      return
+    }
+
     setSaving(true)
 
     const payload = { ...form }
-    // Clean empty strings to null
     for (const key of Object.keys(payload)) {
       if (payload[key] === '') payload[key] = null
     }
@@ -110,9 +115,9 @@ export default function MemberForm({ member, members = [], onSaved, onCancel }) 
           </select>
         </div>
         <div>
-          <label className={labelClass}>Tipologia Atleta</label>
-          <select value={form.member_type || ''} onChange={(e) => set('member_type', e.target.value)} className={inputClass}>
-            <option value="">--</option>
+          <label className={labelClass}>Tipologia Atleta *</label>
+          <select value={form.member_type || ''} onChange={(e) => set('member_type', e.target.value)} required className={`${inputClass} ${!form.member_type ? 'border-orange-300' : ''}`}>
+            <option value="">-- Seleziona --</option>
             <option value="giovane">Giovane</option>
             <option value="adulto">Adulto</option>
             <option value="genitore">Genitore</option>
@@ -124,16 +129,19 @@ export default function MemberForm({ member, members = [], onSaved, onCancel }) 
         </div>
       </div>
 
-      {/* Minor + Genitore */}
+      {/* Attività Giovanile + Genitore */}
       <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={form.is_minor}
-            onChange={(e) => set('is_minor', e.target.checked)}
-            className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-          />
-          <span className="font-medium text-gray-700">Atleta minorenne</span>
+        <label className="flex items-center gap-3 text-sm">
+          <span className="font-medium text-gray-700">Attività giovanile</span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={form.is_minor}
+            onClick={() => set('is_minor', !form.is_minor)}
+            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${form.is_minor ? 'bg-primary-600' : 'bg-gray-200'}`}
+          >
+            <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition-transform ${form.is_minor ? 'translate-x-5' : 'translate-x-0'}`} />
+          </button>
         </label>
         {form.is_minor && (
           <div className="mt-3">
