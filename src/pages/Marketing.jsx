@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
-import { Plus, Megaphone, UserPlus, Phone, Mail, LayoutList, Columns3, Upload, Download, FileDown, CheckCircle2, AlertCircle } from 'lucide-react'
+import { Plus, Megaphone, UserPlus, Phone, Mail, LayoutList, Columns3, Upload, Download, FileDown, CheckCircle2, AlertCircle, Users, Eye, Pencil, Trash2, MessageCircle, ChevronDown, ChevronRight, GripVertical } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { formatDate, formatDateTime } from '../lib/utils'
+import { formatDate, formatDateTime, getFullName } from '../lib/utils'
 import Badge from '../components/ui/Badge'
 import SearchInput from '../components/ui/SearchInput'
 import EmptyState from '../components/ui/EmptyState'
@@ -29,6 +29,55 @@ const PIPELINE_COLUMNS = [
   { key: 'perso', label: 'Persi', color: 'border-red-400', bg: 'bg-red-50', dot: 'bg-red-500' },
 ]
 
+const CONTACT_METHODS = [
+  { value: 'email', label: 'Email', icon: Mail },
+  { value: 'whatsapp', label: 'WhatsApp', icon: MessageCircle },
+  { value: 'phone', label: 'Telefono', icon: Phone },
+]
+
+function ContactButton({ contact, size = 14 }) {
+  const method = contact.preferred_contact_method
+  const phone = (contact.phone || '').replace(/\s+/g, '')
+
+  if (method === 'whatsapp' && phone) {
+    return (
+      <a href={`https://wa.me/${phone.startsWith('+') ? phone.slice(1) : '39' + phone}`} target="_blank" rel="noopener noreferrer" className="rounded-lg p-1.5 text-green-600 hover:bg-green-50" title="WhatsApp">
+        <MessageCircle size={size} />
+      </a>
+    )
+  }
+  if (method === 'phone' && phone) {
+    return (
+      <a href={`tel:${phone}`} className="rounded-lg p-1.5 text-blue-600 hover:bg-blue-50" title="Chiama">
+        <Phone size={size} />
+      </a>
+    )
+  }
+  if (method === 'email' && contact.email) {
+    return (
+      <a href={`mailto:${contact.email}`} className="rounded-lg p-1.5 text-orange-600 hover:bg-orange-50" title="Email">
+        <Mail size={size} />
+      </a>
+    )
+  }
+  // Fallback: show first available method
+  if (contact.email) {
+    return (
+      <a href={`mailto:${contact.email}`} className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-50" title="Email">
+        <Mail size={size} />
+      </a>
+    )
+  }
+  if (phone) {
+    return (
+      <a href={`tel:${phone}`} className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-50" title="Chiama">
+        <Phone size={size} />
+      </a>
+    )
+  }
+  return null
+}
+
 export default function Marketing() {
   const [contacts, setContacts] = useState([])
   const [loading, setLoading] = useState(true)
@@ -39,14 +88,20 @@ export default function Marketing() {
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [convertTarget, setConvertTarget] = useState(null)
   const [showEmail, setShowEmail] = useState(false)
-  const [viewMode, setViewMode] = useState('list') // 'list' | 'board'
+  const [viewMode, setViewMode] = useState('list') // 'list' | 'parents' | 'board'
+  const [boardGroupBy, setBoardGroupBy] = useState('athlete') // 'athlete' | 'parent'
   const [showImportModal, setShowImportModal] = useState(false)
+  const [draggedContact, setDraggedContact] = useState(null)
 
   useEffect(() => { fetchContacts() }, [])
 
   async function fetchContacts() {
     setLoading(true)
-    const { data } = await supabase.from('users').select('id, first_name, last_name, email, phone, source, interest, contact_status, notes, last_contacted_at, created_at').eq('is_member', false).order('created_at', { ascending: false })
+    const { data } = await supabase
+      .from('users')
+      .select('id, first_name, last_name, email, phone, source, interest, contact_status, notes, last_contacted_at, created_at, parent_id, preferred_contact_method, parent:parent_id(id, first_name, last_name, email, phone, preferred_contact_method)')
+      .eq('is_member', false)
+      .order('created_at', { ascending: false })
     setContacts(data || [])
     setLoading(false)
   }
@@ -69,17 +124,90 @@ export default function Marketing() {
   }
 
   async function handleStatusChange(contactId, newStatus) {
-    await supabase.from('users').update({ contact_status: newStatus }).eq('id', contactId)
-    fetchContacts()
+    await supabase.from('users').update({ contact_status: newStatus, last_contacted_at: new Date().toISOString() }).eq('id', contactId)
+    setContacts(prev => prev.map(c => c.id === contactId ? { ...c, contact_status: newStatus } : c))
+  }
+
+  // Drag and drop handlers
+  function handleDragStart(e, contact) {
+    setDraggedContact(contact)
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', contact.id)
+    e.currentTarget.classList.add('opacity-50')
+  }
+
+  function handleDragEnd(e) {
+    e.currentTarget.classList.remove('opacity-50')
+    setDraggedContact(null)
+  }
+
+  function handleDragOver(e) {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+  }
+
+  function handleDragEnter(e) {
+    e.preventDefault()
+    e.currentTarget.classList.add('ring-2', 'ring-primary-400', 'bg-primary-50/50')
+  }
+
+  function handleDragLeave(e) {
+    e.currentTarget.classList.remove('ring-2', 'ring-primary-400', 'bg-primary-50/50')
+  }
+
+  function handleDrop(e, newStatus) {
+    e.preventDefault()
+    e.currentTarget.classList.remove('ring-2', 'ring-primary-400', 'bg-primary-50/50')
+    if (draggedContact && draggedContact.contact_status !== newStatus) {
+      handleStatusChange(draggedContact.id, newStatus)
+    }
+    setDraggedContact(null)
   }
 
   const filtered = contacts.filter((c) => {
     const matchesSearch = !search ||
       `${c.first_name} ${c.last_name}`.toLowerCase().includes(search.toLowerCase()) ||
-      (c.email || '').toLowerCase().includes(search.toLowerCase())
+      (c.email || '').toLowerCase().includes(search.toLowerCase()) ||
+      (c.parent ? `${c.parent.first_name} ${c.parent.last_name}`.toLowerCase().includes(search.toLowerCase()) : false)
     const matchesStatus = filterStatus === 'tutti' || c.contact_status === filterStatus
     return matchesSearch && matchesStatus
   })
+
+  // Group contacts by parent for parent view
+  function getParentGroups() {
+    const groups = new Map()
+    const noParent = []
+    for (const c of filtered) {
+      if (c.parent_id && c.parent) {
+        const key = c.parent_id
+        if (!groups.has(key)) {
+          groups.set(key, { parent: c.parent, children: [] })
+        }
+        groups.get(key).children.push(c)
+      } else {
+        noParent.push(c)
+      }
+    }
+    return { groups: Array.from(groups.values()), noParent }
+  }
+
+  // Group board contacts by parent
+  function getBoardParentGroups(colContacts) {
+    const groups = new Map()
+    const noParent = []
+    for (const c of colContacts) {
+      if (c.parent_id && c.parent) {
+        const key = c.parent_id
+        if (!groups.has(key)) {
+          groups.set(key, { parent: c.parent, children: [] })
+        }
+        groups.get(key).children.push(c)
+      } else {
+        noParent.push(c)
+      }
+    }
+    return { groups: Array.from(groups.values()), noParent }
+  }
 
   function handleExport() {
     const headers = IMPORT_CONTACT_COLUMNS.map(c => c.header)
@@ -160,23 +288,43 @@ export default function Marketing() {
             </div>
           )}
         </div>
-        <div className="flex rounded-lg border border-gray-200 p-0.5">
-          <button
-            onClick={() => setViewMode('list')}
-            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium ${
-              viewMode === 'list' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            <LayoutList size={16} /> Lista
-          </button>
-          <button
-            onClick={() => setViewMode('board')}
-            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium ${
-              viewMode === 'board' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            <Columns3 size={16} /> Board
-          </button>
+        <div className="flex items-center gap-2">
+          {viewMode === 'board' && (
+            <select
+              value={boardGroupBy}
+              onChange={(e) => setBoardGroupBy(e.target.value)}
+              className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600"
+            >
+              <option value="athlete">Per Atleta</option>
+              <option value="parent">Per Genitore</option>
+            </select>
+          )}
+          <div className="flex rounded-lg border border-gray-200 p-0.5">
+            <button
+              onClick={() => setViewMode('list')}
+              className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium ${
+                viewMode === 'list' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <LayoutList size={16} /> Lista
+            </button>
+            <button
+              onClick={() => setViewMode('parents')}
+              className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium ${
+                viewMode === 'parents' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <Users size={16} /> Genitori
+            </button>
+            <button
+              onClick={() => setViewMode('board')}
+              className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium ${
+                viewMode === 'board' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <Columns3 size={16} /> Board
+            </button>
+          </div>
         </div>
       </div>
 
@@ -192,8 +340,16 @@ export default function Marketing() {
                 (c.email || '').toLowerCase().includes(search.toLowerCase())
               return c.contact_status === col.key && matchesSearch
             })
+
             return (
-              <div key={col.key} className={`flex min-w-[260px] flex-1 flex-col rounded-lg border-t-4 ${col.color} bg-gray-50`}>
+              <div
+                key={col.key}
+                className={`flex min-w-[280px] flex-1 flex-col rounded-lg border-t-4 ${col.color} bg-gray-50 transition-all`}
+                onDragOver={handleDragOver}
+                onDragEnter={handleDragEnter}
+                onDragLeave={handleDragLeave}
+                onDrop={(e) => handleDrop(e, col.key)}
+              >
                 <div className="flex items-center justify-between px-4 py-3">
                   <div className="flex items-center gap-2">
                     <div className={`h-2.5 w-2.5 rounded-full ${col.dot}`} />
@@ -206,46 +362,53 @@ export default function Marketing() {
                 <div className="flex-1 space-y-2 px-3 pb-3">
                   {colContacts.length === 0 ? (
                     <p className="py-4 text-center text-xs text-gray-400">Nessun contatto</p>
+                  ) : boardGroupBy === 'parent' ? (
+                    /* Board grouped by parent */
+                    (() => {
+                      const { groups, noParent } = getBoardParentGroups(colContacts)
+                      return (
+                        <>
+                          {groups.map(({ parent, children }) => (
+                            <ParentBoardGroup
+                              key={parent.id}
+                              parent={parent}
+                              children={children}
+                              onEdit={(c) => { setEditing(c); setShowForm(true) }}
+                              onDelete={setDeleteTarget}
+                              onConvert={setConvertTarget}
+                              onDragStart={handleDragStart}
+                              onDragEnd={handleDragEnd}
+                              onStatusChange={handleStatusChange}
+                            />
+                          ))}
+                          {noParent.map((contact) => (
+                            <KanbanCard
+                              key={contact.id}
+                              contact={contact}
+                              onEdit={() => { setEditing(contact); setShowForm(true) }}
+                              onDelete={() => setDeleteTarget(contact)}
+                              onConvert={() => setConvertTarget(contact)}
+                              onDragStart={handleDragStart}
+                              onDragEnd={handleDragEnd}
+                              onStatusChange={handleStatusChange}
+                            />
+                          ))}
+                        </>
+                      )
+                    })()
                   ) : (
+                    /* Board by athlete */
                     colContacts.map((contact) => (
-                      <div key={contact.id} className="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
-                        <p className="text-sm font-medium text-gray-900">{contact.first_name} {contact.last_name}</p>
-                        {contact.email && (
-                          <p className="mt-0.5 flex items-center gap-1 text-xs text-gray-500">
-                            <Mail size={10} /> {contact.email}
-                          </p>
-                        )}
-                        {contact.phone && (
-                          <p className="mt-0.5 flex items-center gap-1 text-xs text-gray-500">
-                            <Phone size={10} /> {contact.phone}
-                          </p>
-                        )}
-                        {contact.interest && (
-                          <span className="mt-1.5 inline-block rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">{contact.interest}</span>
-                        )}
-                        <div className="mt-2 flex items-center justify-between border-t border-gray-100 pt-2">
-                          <select
-                            value={contact.contact_status}
-                            onChange={(e) => handleStatusChange(contact.id, e.target.value)}
-                            className="rounded border border-gray-200 px-1.5 py-0.5 text-xs text-gray-600"
-                          >
-                            <option value="nuovo">Nuovo</option>
-                            <option value="contattato">Contattato</option>
-                            <option value="interessato">Interessato</option>
-                            <option value="convertito">Convertito</option>
-                            <option value="perso">Perso</option>
-                          </select>
-                          <div className="flex gap-1.5">
-                            {contact.contact_status !== 'convertito' && (
-                              <button onClick={() => setConvertTarget(contact)} className="text-green-600 hover:text-green-700" title="Converti">
-                                <UserPlus size={14} />
-                              </button>
-                            )}
-                            <button onClick={() => { setEditing(contact); setShowForm(true) }} className="text-xs text-gray-500 hover:text-gray-700">Mod.</button>
-                            <button onClick={() => setDeleteTarget(contact)} className="text-xs text-red-500 hover:text-red-700">Elim.</button>
-                          </div>
-                        </div>
-                      </div>
+                      <KanbanCard
+                        key={contact.id}
+                        contact={contact}
+                        onEdit={() => { setEditing(contact); setShowForm(true) }}
+                        onDelete={() => setDeleteTarget(contact)}
+                        onConvert={() => setConvertTarget(contact)}
+                        onDragStart={handleDragStart}
+                        onDragEnd={handleDragEnd}
+                        onStatusChange={handleStatusChange}
+                      />
                     ))
                   )}
                 </div>
@@ -253,6 +416,16 @@ export default function Marketing() {
             )
           })}
         </div>
+      ) : viewMode === 'parents' ? (
+        /* ===== PARENTS VIEW ===== */
+        <ParentsView
+          contacts={filtered}
+          parentGroups={getParentGroups()}
+          onEdit={(c) => { setEditing(c); setShowForm(true) }}
+          onDelete={setDeleteTarget}
+          onConvert={setConvertTarget}
+          onStatusChange={handleStatusChange}
+        />
       ) : filtered.length === 0 ? (
         <EmptyState icon={Megaphone} title="Nessun contatto trovato" description="Aggiungi il primo contatto" />
       ) : (
@@ -263,6 +436,7 @@ export default function Marketing() {
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Nome</th>
                 <th className="hidden px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 md:table-cell">Contatti</th>
+                <th className="hidden px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 lg:table-cell">Genitore</th>
                 <th className="hidden px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 lg:table-cell">Fonte</th>
                 <th className="hidden px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 lg:table-cell">Interesse</th>
                 <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Stato</th>
@@ -283,6 +457,9 @@ export default function Marketing() {
                       {contact.phone && <div className="flex items-center gap-1"><Phone size={12} /> {contact.phone}</div>}
                     </div>
                   </td>
+                  <td className="hidden whitespace-nowrap px-4 py-3 text-sm text-gray-600 lg:table-cell">
+                    {contact.parent ? getFullName(contact.parent) : '-'}
+                  </td>
                   <td className="hidden whitespace-nowrap px-4 py-3 text-sm text-gray-600 lg:table-cell">{contact.source || '-'}</td>
                   <td className="hidden whitespace-nowrap px-4 py-3 text-sm text-gray-600 lg:table-cell">{contact.interest || '-'}</td>
                   <td className="whitespace-nowrap px-4 py-3">
@@ -302,14 +479,19 @@ export default function Marketing() {
                     {contact.last_contacted_at ? formatDateTime(contact.last_contacted_at) : '-'}
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-right">
-                    <div className="flex justify-end gap-2">
+                    <div className="flex justify-end gap-1">
+                      <ContactButton contact={contact} />
                       {contact.contact_status !== 'convertito' && (
-                        <button onClick={() => setConvertTarget(contact)} className="text-xs text-green-600 hover:text-green-700" title="Converti a atleta">
+                        <button onClick={() => setConvertTarget(contact)} className="rounded-lg p-1.5 text-green-600 hover:bg-green-50" title="Converti a atleta">
                           <UserPlus size={16} />
                         </button>
                       )}
-                      <button onClick={() => { setEditing(contact); setShowForm(true) }} className="text-xs text-gray-600 hover:text-gray-700">Modifica</button>
-                      <button onClick={() => setDeleteTarget(contact)} className="text-xs text-red-600 hover:text-red-700">Elimina</button>
+                      <button onClick={() => { setEditing(contact); setShowForm(true) }} className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100" title="Modifica">
+                        <Pencil size={16} />
+                      </button>
+                      <button onClick={() => setDeleteTarget(contact)} className="rounded-lg p-1.5 text-red-500 hover:bg-red-50" title="Elimina">
+                        <Trash2 size={16} />
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -331,7 +513,12 @@ export default function Marketing() {
       </Modal>
 
       <Modal open={showForm} onClose={() => setShowForm(false)} title={editing ? 'Modifica Contatto' : 'Nuovo Contatto'} size="md">
-        <ContactForm contact={editing} onSaved={() => { setShowForm(false); fetchContacts() }} onCancel={() => setShowForm(false)} />
+        <ContactForm
+          contact={editing}
+          contacts={contacts}
+          onSaved={() => { setShowForm(false); fetchContacts() }}
+          onCancel={() => setShowForm(false)}
+        />
       </Modal>
 
       <ConfirmDialog
@@ -356,7 +543,225 @@ export default function Marketing() {
   )
 }
 
-function ContactForm({ contact, onSaved, onCancel }) {
+/* ===== Kanban Card ===== */
+function KanbanCard({ contact, onEdit, onDelete, onConvert, onDragStart, onDragEnd, onStatusChange }) {
+  return (
+    <div
+      draggable
+      onDragStart={(e) => onDragStart(e, contact)}
+      onDragEnd={onDragEnd}
+      className="cursor-grab rounded-lg border border-gray-200 bg-white p-3 shadow-sm transition-shadow hover:shadow-md active:cursor-grabbing"
+    >
+      <div className="flex items-start justify-between">
+        <div className="flex items-center gap-1.5">
+          <GripVertical size={14} className="text-gray-300" />
+          <p className="text-sm font-medium text-gray-900">{contact.first_name} {contact.last_name}</p>
+        </div>
+        <ContactButton contact={contact} size={12} />
+      </div>
+      {contact.email && (
+        <p className="mt-0.5 flex items-center gap-1 pl-5 text-xs text-gray-500">
+          <Mail size={10} /> {contact.email}
+        </p>
+      )}
+      {contact.phone && (
+        <p className="mt-0.5 flex items-center gap-1 pl-5 text-xs text-gray-500">
+          <Phone size={10} /> {contact.phone}
+        </p>
+      )}
+      {contact.parent && (
+        <p className="mt-0.5 flex items-center gap-1 pl-5 text-xs text-blue-600">
+          <Users size={10} /> {getFullName(contact.parent)}
+        </p>
+      )}
+      {contact.interest && (
+        <span className="mt-1.5 inline-block rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">{contact.interest}</span>
+      )}
+      <div className="mt-2 flex items-center justify-between border-t border-gray-100 pt-2">
+        <select
+          value={contact.contact_status}
+          onChange={(e) => { e.stopPropagation(); onStatusChange(contact.id, e.target.value) }}
+          className="rounded border border-gray-200 px-1.5 py-0.5 text-xs text-gray-600"
+        >
+          <option value="nuovo">Nuovo</option>
+          <option value="contattato">Contattato</option>
+          <option value="interessato">Interessato</option>
+          <option value="convertito">Convertito</option>
+          <option value="perso">Perso</option>
+        </select>
+        <div className="flex gap-1">
+          {contact.contact_status !== 'convertito' && (
+            <button onClick={onConvert} className="rounded-lg p-1 text-green-600 hover:bg-green-50" title="Converti">
+              <UserPlus size={14} />
+            </button>
+          )}
+          <button onClick={onEdit} className="rounded-lg p-1 text-gray-500 hover:bg-gray-100" title="Modifica">
+            <Pencil size={14} />
+          </button>
+          <button onClick={onDelete} className="rounded-lg p-1 text-red-500 hover:bg-red-50" title="Elimina">
+            <Trash2 size={14} />
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ===== Parent Board Group ===== */
+function ParentBoardGroup({ parent, children, onEdit, onDelete, onConvert, onDragStart, onDragEnd, onStatusChange }) {
+  const [expanded, setExpanded] = useState(true)
+  return (
+    <div className="rounded-lg border border-blue-200 bg-blue-50/50 p-2">
+      <button onClick={() => setExpanded(!expanded)} className="flex w-full items-center gap-1.5 text-left">
+        {expanded ? <ChevronDown size={14} className="text-blue-600" /> : <ChevronRight size={14} className="text-blue-600" />}
+        <Users size={14} className="text-blue-600" />
+        <span className="text-xs font-semibold text-blue-800">{getFullName(parent)}</span>
+        <span className="ml-auto rounded-full bg-blue-100 px-1.5 py-0.5 text-xs text-blue-600">{children.length}</span>
+      </button>
+      {expanded && (
+        <div className="mt-2 space-y-2">
+          {children.map((contact) => (
+            <KanbanCard
+              key={contact.id}
+              contact={contact}
+              onEdit={() => onEdit(contact)}
+              onDelete={() => onDelete(contact)}
+              onConvert={() => onConvert(contact)}
+              onDragStart={onDragStart}
+              onDragEnd={onDragEnd}
+              onStatusChange={onStatusChange}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ===== Parents View ===== */
+function ParentsView({ contacts, parentGroups, onEdit, onDelete, onConvert, onStatusChange }) {
+  const { groups, noParent } = parentGroups
+
+  if (groups.length === 0 && noParent.length === 0) {
+    return <EmptyState icon={Users} title="Nessun contatto trovato" description="Aggiungi il primo contatto" />
+  }
+
+  return (
+    <div className="space-y-4">
+      {groups.map(({ parent, children }) => (
+        <ParentCard
+          key={parent.id}
+          parent={parent}
+          children={children}
+          onEdit={onEdit}
+          onDelete={onDelete}
+          onConvert={onConvert}
+          onStatusChange={onStatusChange}
+        />
+      ))}
+      {noParent.length > 0 && (
+        <div className="rounded-lg border border-gray-200 bg-white">
+          <div className="border-b border-gray-100 bg-gray-50 px-4 py-3">
+            <h3 className="text-sm font-semibold text-gray-600">Senza genitore assegnato</h3>
+          </div>
+          <div className="divide-y divide-gray-100">
+            {noParent.map((c) => (
+              <ParentChildRow key={c.id} contact={c} onEdit={onEdit} onDelete={onDelete} onConvert={onConvert} onStatusChange={onStatusChange} />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ParentCard({ parent, children, onEdit, onDelete, onConvert, onStatusChange }) {
+  const [expanded, setExpanded] = useState(true)
+
+  return (
+    <div className="rounded-lg border border-gray-200 bg-white">
+      <div className="flex items-center justify-between border-b border-gray-100 bg-blue-50 px-4 py-3">
+        <button onClick={() => setExpanded(!expanded)} className="flex items-center gap-2 text-left">
+          {expanded ? <ChevronDown size={16} className="text-blue-600" /> : <ChevronRight size={16} className="text-blue-600" />}
+          <Users size={16} className="text-blue-600" />
+          <div>
+            <span className="font-semibold text-gray-900">{getFullName(parent)}</span>
+            <span className="ml-2 text-xs text-gray-500">{children.length} figli</span>
+          </div>
+        </button>
+        <div className="flex items-center gap-2">
+          {parent.phone && (
+            <span className="flex items-center gap-1 text-xs text-gray-500">
+              <Phone size={12} /> {parent.phone}
+            </span>
+          )}
+          {parent.email && (
+            <span className="flex items-center gap-1 text-xs text-gray-500">
+              <Mail size={12} /> {parent.email}
+            </span>
+          )}
+          <ContactButton contact={parent} />
+        </div>
+      </div>
+      {expanded && (
+        <div className="divide-y divide-gray-100">
+          {children.map((c) => (
+            <ParentChildRow key={c.id} contact={c} onEdit={onEdit} onDelete={onDelete} onConvert={onConvert} onStatusChange={onStatusChange} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ParentChildRow({ contact, onEdit, onDelete, onConvert, onStatusChange }) {
+  return (
+    <div className="flex items-center justify-between px-4 py-3 hover:bg-gray-50">
+      <div className="flex items-center gap-3">
+        <div>
+          <p className="text-sm font-medium text-gray-900">{contact.first_name} {contact.last_name}</p>
+          <div className="flex gap-3 text-xs text-gray-500">
+            {contact.email && <span className="flex items-center gap-1"><Mail size={10} /> {contact.email}</span>}
+            {contact.phone && <span className="flex items-center gap-1"><Phone size={10} /> {contact.phone}</span>}
+          </div>
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        {contact.interest && (
+          <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">{contact.interest}</span>
+        )}
+        <select
+          value={contact.contact_status}
+          onChange={(e) => onStatusChange(contact.id, e.target.value)}
+          className="rounded border border-gray-300 px-2 py-1 text-xs"
+        >
+          <option value="nuovo">Nuovo</option>
+          <option value="contattato">Contattato</option>
+          <option value="interessato">Interessato</option>
+          <option value="convertito">Convertito</option>
+          <option value="perso">Perso</option>
+        </select>
+        <div className="flex gap-1">
+          <ContactButton contact={contact} />
+          {contact.contact_status !== 'convertito' && (
+            <button onClick={() => onConvert(contact)} className="rounded-lg p-1.5 text-green-600 hover:bg-green-50" title="Converti">
+              <UserPlus size={16} />
+            </button>
+          )}
+          <button onClick={() => onEdit(contact)} className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100" title="Modifica">
+            <Pencil size={16} />
+          </button>
+          <button onClick={() => onDelete(contact)} className="rounded-lg p-1.5 text-red-500 hover:bg-red-50" title="Elimina">
+            <Trash2 size={16} />
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ===== Contact Form ===== */
+function ContactForm({ contact, contacts = [], onSaved, onCancel }) {
   const [form, setForm] = useState({
     first_name: contact?.first_name || '',
     last_name: contact?.last_name || '',
@@ -366,11 +771,16 @@ function ContactForm({ contact, onSaved, onCancel }) {
     interest: contact?.interest || '',
     contact_status: contact?.contact_status || 'nuovo',
     notes: contact?.notes || '',
+    parent_id: contact?.parent_id || '',
+    preferred_contact_method: contact?.preferred_contact_method || '',
   })
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
   function set(field, value) { setForm(prev => ({ ...prev, [field]: value })) }
+
+  // Possible parents: other contacts or any user that could be a parent
+  const parentOptions = contacts.filter((c) => c.id !== contact?.id)
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -420,6 +830,20 @@ function ContactForm({ contact, onSaved, onCancel }) {
           <input type="tel" value={form.phone || ''} onChange={(e) => set('phone', e.target.value)} className={inputClass} />
         </div>
         <div>
+          <label className="mb-1 block text-sm font-medium text-gray-700">Metodo contatto preferito</label>
+          <select value={form.preferred_contact_method || ''} onChange={(e) => set('preferred_contact_method', e.target.value)} className={inputClass}>
+            <option value="">--</option>
+            {CONTACT_METHODS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="mb-1 block text-sm font-medium text-gray-700">Genitore</label>
+          <select value={form.parent_id || ''} onChange={(e) => set('parent_id', e.target.value)} className={inputClass}>
+            <option value="">-- Nessuno --</option>
+            {parentOptions.map(p => <option key={p.id} value={p.id}>{p.last_name} {p.first_name}</option>)}
+          </select>
+        </div>
+        <div>
           <label className="mb-1 block text-sm font-medium text-gray-700">Fonte</label>
           <select value={form.source || ''} onChange={(e) => set('source', e.target.value)} className={inputClass}>
             <option value="">--</option>
@@ -455,6 +879,7 @@ function ContactForm({ contact, onSaved, onCancel }) {
   )
 }
 
+/* ===== Import CSV - riga per riga ===== */
 function ImportContattiModal({ onDone, onCancel }) {
   const fileInputRef = useRef()
   const [step, setStep] = useState('upload') // upload | importing | done
@@ -509,10 +934,6 @@ function ImportContattiModal({ onDone, onCancel }) {
       const totalRows = lines.length - 1
       setProgress({ current: 0, total: totalRows })
 
-      const BATCH_SIZE = 20
-      let batch = []
-      let batchRowNumbers = []
-
       for (let i = 1; i < lines.length; i++) {
         const vals = lines[i].split(sep).map(v => v.replace(/^"|"$/g, '').trim())
         const row = {}
@@ -523,30 +944,21 @@ function ImportContattiModal({ onDone, onCancel }) {
 
         if (!row.first_name && !row.last_name) {
           errorsList.push({ row: i + 1, message: 'Nome e cognome mancanti' })
+          setProgress({ current: i, total: totalRows })
           continue
         }
 
         row.is_member = false
         row.contact_status = row.contact_status || 'nuovo'
         row.status = 'attivo'
-        batch.push(row)
-        batchRowNumbers.push(i + 1)
 
-        if (batch.length >= BATCH_SIZE || i === lines.length - 1) {
-          const { error } = await supabase.from('users').insert(batch)
-          if (error) {
-            for (let j = 0; j < batch.length; j++) {
-              const { error: rowErr } = await supabase.from('users').insert(batch[j])
-              if (rowErr) errorsList.push({ row: batchRowNumbers[j], message: rowErr.message })
-              else imported++
-            }
-          } else {
-            imported += batch.length
-          }
-          batch = []
-          batchRowNumbers = []
-          setProgress({ current: i, total: totalRows })
+        const { error } = await supabase.from('users').insert(row)
+        if (error) {
+          errorsList.push({ row: i + 1, message: error.message })
+        } else {
+          imported++
         }
+        setProgress({ current: i, total: totalRows })
       }
     } catch (err) {
       errorsList.push({ row: 0, message: err.message })
