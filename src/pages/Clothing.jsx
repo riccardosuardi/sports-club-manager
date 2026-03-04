@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Plus, Shirt, Package } from 'lucide-react'
+import { Plus, Shirt, Package, Pencil, Trash2, UserPlus, Undo2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { formatDateTime } from '../lib/utils'
+import { formatDate, getFullName } from '../lib/utils'
 import Badge from '../components/ui/Badge'
 import SearchInput from '../components/ui/SearchInput'
 import EmptyState from '../components/ui/EmptyState'
@@ -10,27 +10,32 @@ import ConfirmDialog from '../components/ui/ConfirmDialog'
 
 export default function Clothing() {
   const [items, setItems] = useState([])
-  const [orders, setOrders] = useState([])
+  const [inventory, setInventory] = useState([])
+  const [assignments, setAssignments] = useState([])
   const [members, setMembers] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [tab, setTab] = useState('catalogo')
+  const [tab, setTab] = useState('inventario')
   const [showItemForm, setShowItemForm] = useState(false)
   const [editingItem, setEditingItem] = useState(null)
-  const [showOrderForm, setShowOrderForm] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState(null)
+  const [showAssignForm, setShowAssignForm] = useState(false)
+  const [assignItem, setAssignItem] = useState(null)
+  const [selectedItem, setSelectedItem] = useState(null)
 
   useEffect(() => { fetchData() }, [])
 
   async function fetchData() {
     setLoading(true)
-    const [itemsRes, ordersRes, membersRes] = await Promise.all([
+    const [itemsRes, inventoryRes, assignmentsRes, membersRes] = await Promise.all([
       supabase.from('clothing_items').select('*').order('name'),
-      supabase.from('clothing_orders').select('*, member:member_id(first_name, last_name), item:item_id(name, category)').order('ordered_at', { ascending: false }),
+      supabase.from('clothing_inventory').select('*'),
+      supabase.from('clothing_assignments').select('*, member:member_id(first_name, last_name), item:item_id(name, category)').order('assigned_at', { ascending: false }),
       supabase.from('users').select('id, first_name, last_name').eq('is_member', true).eq('status', 'attivo').order('last_name'),
     ])
     setItems(itemsRes.data || [])
-    setOrders(ordersRes.data || [])
+    setInventory(inventoryRes.data || [])
+    setAssignments(assignmentsRes.data || [])
     setMembers(membersRes.data || [])
     setLoading(false)
   }
@@ -40,17 +45,33 @@ export default function Clothing() {
     fetchData()
   }
 
-  async function handleUpdateOrderStatus(orderId, status) {
-    await supabase.from('clothing_orders').update({ status }).eq('id', orderId)
+  async function handleReturnAssignment(assignmentId) {
+    await supabase.from('clothing_assignments').update({ returned_at: new Date().toISOString().slice(0, 10) }).eq('id', assignmentId)
     fetchData()
+  }
+
+  function getItemInventory(itemId) {
+    return inventory.filter(inv => inv.item_id === itemId)
+  }
+
+  function getItemAssignments(itemId) {
+    return assignments.filter(a => a.item_id === itemId && !a.returned_at)
+  }
+
+  function getTotalQuantity(itemId) {
+    return getItemInventory(itemId).reduce((sum, inv) => sum + inv.quantity, 0)
+  }
+
+  function getAssignedCount(itemId) {
+    return getItemAssignments(itemId).length
   }
 
   const filteredItems = items.filter((i) =>
     !search || i.name.toLowerCase().includes(search.toLowerCase()) || (i.category || '').toLowerCase().includes(search.toLowerCase())
   )
 
-  const filteredOrders = orders.filter((o) =>
-    !search || (o.member?.last_name || '').toLowerCase().includes(search.toLowerCase()) || (o.item?.name || '').toLowerCase().includes(search.toLowerCase())
+  const filteredAssignments = assignments.filter((a) =>
+    !search || (a.member?.last_name || '').toLowerCase().includes(search.toLowerCase()) || (a.item?.name || '').toLowerCase().includes(search.toLowerCase())
   )
 
   return (
@@ -58,18 +79,15 @@ export default function Clothing() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Abbigliamento</h1>
-          <p className="text-sm text-gray-500">{items.length} articoli, {orders.filter(o => o.status === 'richiesto').length} ordini in attesa</p>
+          <p className="text-sm text-gray-500">
+            {items.length} articoli, {assignments.filter(a => !a.returned_at).length} capi assegnati
+          </p>
         </div>
         <div className="flex gap-2">
-          {tab === 'catalogo' ? (
+          {tab === 'inventario' && (
             <button onClick={() => { setEditingItem(null); setShowItemForm(true) }}
               className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-700">
               <Plus size={18} /> Nuovo Articolo
-            </button>
-          ) : (
-            <button onClick={() => setShowOrderForm(true)}
-              className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-700">
-              <Plus size={18} /> Nuovo Ordine
             </button>
           )}
         </div>
@@ -77,60 +95,96 @@ export default function Clothing() {
 
       {/* Tabs */}
       <div className="flex gap-1 rounded-lg bg-gray-100 p-1">
-        <button onClick={() => setTab('catalogo')}
-          className={`flex-1 rounded-md px-4 py-2 text-sm font-medium ${tab === 'catalogo' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
-          Catalogo ({items.length})
+        <button onClick={() => setTab('inventario')}
+          className={`flex-1 rounded-md px-4 py-2 text-sm font-medium ${tab === 'inventario' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
+          Inventario ({items.length})
         </button>
-        <button onClick={() => setTab('ordini')}
-          className={`flex-1 rounded-md px-4 py-2 text-sm font-medium ${tab === 'ordini' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
-          Ordini ({orders.length})
+        <button onClick={() => setTab('assegnazioni')}
+          className={`flex-1 rounded-md px-4 py-2 text-sm font-medium ${tab === 'assegnazioni' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
+          Assegnazioni ({assignments.filter(a => !a.returned_at).length})
         </button>
       </div>
 
       <div className="sm:w-80">
-        <SearchInput value={search} onChange={setSearch} placeholder={tab === 'catalogo' ? 'Cerca articoli...' : 'Cerca ordini...'} />
+        <SearchInput value={search} onChange={setSearch} placeholder={tab === 'inventario' ? 'Cerca articoli...' : 'Cerca assegnazioni...'} />
       </div>
 
       {loading ? (
         <div className="py-12 text-center text-gray-500">Caricamento...</div>
-      ) : tab === 'catalogo' ? (
+      ) : tab === 'inventario' ? (
         filteredItems.length === 0 ? (
-          <EmptyState icon={Shirt} title="Nessun articolo" description="Aggiungi il primo articolo al catalogo" />
+          <EmptyState icon={Shirt} title="Nessun articolo" description="Aggiungi il primo articolo all'inventario" />
         ) : (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {filteredItems.map((item) => (
-              <div key={item.id} className="rounded-lg border border-gray-200 bg-white p-5">
-                <div className="mb-2 flex items-start justify-between">
-                  <div>
-                    <h3 className="font-semibold text-gray-900">{item.name}</h3>
-                    {item.category && <p className="text-xs text-gray-500">{item.category}</p>}
+            {filteredItems.map((item) => {
+              const itemInv = getItemInventory(item.id)
+              const totalQty = getTotalQuantity(item.id)
+              const assignedCount = getAssignedCount(item.id)
+              return (
+                <div key={item.id} className="rounded-lg border border-gray-200 bg-white p-5">
+                  <div className="mb-2 flex items-start justify-between">
+                    <div>
+                      <h3 className="font-semibold text-gray-900">{item.name}</h3>
+                      {item.category && <p className="text-xs text-gray-500">{item.category}</p>}
+                    </div>
+                    {item.price && <span className="text-lg font-bold text-gray-900">&euro; {Number(item.price).toFixed(2)}</span>}
                   </div>
-                  {item.price && <span className="text-lg font-bold text-gray-900">&euro; {Number(item.price).toFixed(2)}</span>}
+                  {item.description && <p className="mb-3 text-sm text-gray-600">{item.description}</p>}
+
+                  {/* Taglie con quantit\u00e0 */}
+                  {item.available_sizes?.length > 0 && (
+                    <div className="mb-3">
+                      <p className="mb-1.5 text-xs font-medium text-gray-500">Taglie disponibili</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {item.available_sizes.map((size) => {
+                          const inv = itemInv.find(i => i.size === size)
+                          const qty = inv ? inv.quantity : 0
+                          return (
+                            <span key={size} className={`rounded-md px-2 py-1 text-xs font-medium ${qty > 0 ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-gray-100 text-gray-400'}`}>
+                              {size} <span className="font-bold">({qty})</span>
+                            </span>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="mb-3 flex gap-4 text-xs text-gray-500">
+                    <span>Totale: <strong className="text-gray-700">{totalQty}</strong></span>
+                    <span>Assegnati: <strong className="text-gray-700">{assignedCount}</strong></span>
+                    <span>Disponibili: <strong className={totalQty - assignedCount > 0 ? 'text-green-700' : 'text-red-600'}>{totalQty - assignedCount}</strong></span>
+                  </div>
+
+                  <div className="flex items-center justify-between border-t pt-3">
+                    <Badge status={item.is_available ? 'attivo' : 'sospeso'}>
+                      {item.is_available ? 'Disponibile' : 'Non disponibile'}
+                    </Badge>
+                    <div className="flex gap-1">
+                      <button
+                        onClick={() => { setAssignItem(item); setShowAssignForm(true) }}
+                        className="rounded-lg p-1.5 text-primary-600 hover:bg-primary-50"
+                        title="Assegna ad atleta"
+                      >
+                        <UserPlus size={16} />
+                      </button>
+                      <button onClick={() => setSelectedItem(item)} className="text-xs text-primary-600 hover:text-primary-700 px-2 py-1">Dettagli</button>
+                      <button onClick={() => { setEditingItem(item); setShowItemForm(true) }} className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100" title="Modifica">
+                        <Pencil size={16} />
+                      </button>
+                      <button onClick={() => setDeleteTarget(item)} className="rounded-lg p-1.5 text-red-500 hover:bg-red-50" title="Elimina">
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </div>
                 </div>
-                {item.description && <p className="mb-3 text-sm text-gray-600">{item.description}</p>}
-                {item.available_sizes?.length > 0 && (
-                  <div className="mb-3 flex flex-wrap gap-1">
-                    {item.available_sizes.map((s) => (
-                      <span key={s} className="rounded bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">{s}</span>
-                    ))}
-                  </div>
-                )}
-                <div className="flex items-center justify-between border-t pt-3">
-                  <Badge status={item.is_available ? 'attivo' : 'sospeso'}>
-                    {item.is_available ? 'Disponibile' : 'Non disponibile'}
-                  </Badge>
-                  <div className="flex gap-2">
-                    <button onClick={() => { setEditingItem(item); setShowItemForm(true) }} className="text-xs text-gray-600 hover:text-gray-700">Modifica</button>
-                    <button onClick={() => setDeleteTarget(item)} className="text-xs text-red-600 hover:text-red-700">Elimina</button>
-                  </div>
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )
       ) : (
-        filteredOrders.length === 0 ? (
-          <EmptyState icon={Package} title="Nessun ordine" description="Crea il primo ordine" />
+        /* Assegnazioni tab */
+        filteredAssignments.length === 0 ? (
+          <EmptyState icon={Package} title="Nessuna assegnazione" description="Assegna capi di abbigliamento agli atleti dall'inventario" />
         ) : (
           <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
             <table className="min-w-full divide-y divide-gray-200">
@@ -139,35 +193,37 @@ export default function Clothing() {
                   <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Atleta</th>
                   <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Articolo</th>
                   <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Taglia</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Qt&agrave;</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Totale</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Data Assegnazione</th>
                   <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Stato</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Data</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Note</th>
                   <th className="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500">Azioni</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {filteredOrders.map((order) => (
-                  <tr key={order.id} className="hover:bg-gray-50">
-                    <td className="whitespace-nowrap px-4 py-3 text-sm">{order.member?.first_name} {order.member?.last_name}</td>
-                    <td className="whitespace-nowrap px-4 py-3 text-sm">{order.item?.name}</td>
-                    <td className="whitespace-nowrap px-4 py-3 text-sm">{order.size}</td>
-                    <td className="whitespace-nowrap px-4 py-3 text-sm">{order.quantity}</td>
-                    <td className="whitespace-nowrap px-4 py-3 text-sm">{order.total_price ? `€ ${Number(order.total_price).toFixed(2)}` : '-'}</td>
-                    <td className="whitespace-nowrap px-4 py-3"><Badge status={order.status} /></td>
-                    <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-500">{formatDateTime(order.ordered_at)}</td>
+                {filteredAssignments.map((a) => (
+                  <tr key={a.id} className="hover:bg-gray-50">
+                    <td className="whitespace-nowrap px-4 py-3 text-sm font-medium">{a.member ? `${a.member.first_name} ${a.member.last_name}` : '-'}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-sm">{a.item?.name || '-'}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-sm">{a.size}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-500">{formatDate(a.assigned_at)}</td>
+                    <td className="whitespace-nowrap px-4 py-3">
+                      {a.returned_at ? (
+                        <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">Restituito {formatDate(a.returned_at)}</span>
+                      ) : (
+                        <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">Assegnato</span>
+                      )}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-500 max-w-xs truncate">{a.notes || '-'}</td>
                     <td className="whitespace-nowrap px-4 py-3 text-right">
-                      <select
-                        value={order.status}
-                        onChange={(e) => handleUpdateOrderStatus(order.id, e.target.value)}
-                        className="rounded border border-gray-300 px-2 py-1 text-xs"
-                      >
-                        <option value="richiesto">Richiesto</option>
-                        <option value="ordinato">Ordinato</option>
-                        <option value="arrivato">Arrivato</option>
-                        <option value="consegnato">Consegnato</option>
-                        <option value="annullato">Annullato</option>
-                      </select>
+                      {!a.returned_at && (
+                        <button
+                          onClick={() => handleReturnAssignment(a.id)}
+                          className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-orange-600 hover:bg-orange-50"
+                          title="Segna come restituito"
+                        >
+                          <Undo2 size={14} /> Restituisci
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -177,14 +233,52 @@ export default function Clothing() {
         )
       )}
 
+      {/* Dettaglio articolo */}
+      {selectedItem && (
+        <Modal open={true} onClose={() => setSelectedItem(null)} title={`Dettaglio - ${selectedItem.name}`} size="md">
+          <div className="space-y-4">
+            <div>
+              <h4 className="text-sm font-medium text-gray-700 mb-2">Assegnazioni attive</h4>
+              {getItemAssignments(selectedItem.id).length === 0 ? (
+                <p className="text-sm text-gray-500">Nessuna assegnazione attiva</p>
+              ) : (
+                <div className="space-y-2">
+                  {getItemAssignments(selectedItem.id).map(a => (
+                    <div key={a.id} className="flex items-center justify-between rounded-lg border border-gray-200 p-3">
+                      <div>
+                        <p className="text-sm font-medium">{a.member ? `${a.member.first_name} ${a.member.last_name}` : '-'}</p>
+                        <p className="text-xs text-gray-500">Taglia: {a.size} - Assegnato il {formatDate(a.assigned_at)}</p>
+                      </div>
+                      <button onClick={() => { handleReturnAssignment(a.id) }} className="text-xs text-orange-600 hover:text-orange-700">Restituisci</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </Modal>
+      )}
+
       {/* Form articolo */}
       <Modal open={showItemForm} onClose={() => setShowItemForm(false)} title={editingItem ? 'Modifica Articolo' : 'Nuovo Articolo'} size="md">
-        <ClothingItemForm item={editingItem} onSaved={() => { setShowItemForm(false); fetchData() }} onCancel={() => setShowItemForm(false)} />
+        <ClothingItemForm
+          item={editingItem}
+          inventory={editingItem ? getItemInventory(editingItem.id) : []}
+          onSaved={() => { setShowItemForm(false); fetchData() }}
+          onCancel={() => setShowItemForm(false)}
+        />
       </Modal>
 
-      {/* Form ordine */}
-      <Modal open={showOrderForm} onClose={() => setShowOrderForm(false)} title="Nuovo Ordine" size="md">
-        <OrderForm items={items} members={members} onSaved={() => { setShowOrderForm(false); fetchData() }} onCancel={() => setShowOrderForm(false)} />
+      {/* Form assegnazione */}
+      <Modal open={showAssignForm} onClose={() => setShowAssignForm(false)} title={`Assegna - ${assignItem?.name || ''}`} size="sm">
+        {assignItem && (
+          <AssignForm
+            item={assignItem}
+            members={members}
+            onSaved={() => { setShowAssignForm(false); fetchData() }}
+            onCancel={() => setShowAssignForm(false)}
+          />
+        )}
       </Modal>
 
       <ConfirmDialog
@@ -200,7 +294,7 @@ export default function Clothing() {
   )
 }
 
-function ClothingItemForm({ item, onSaved, onCancel }) {
+function ClothingItemForm({ item, inventory, onSaved, onCancel }) {
   const [form, setForm] = useState({
     name: item?.name || '',
     description: item?.description || '',
@@ -209,10 +303,25 @@ function ClothingItemForm({ item, onSaved, onCancel }) {
     price: item?.price || '',
     is_available: item?.is_available ?? true,
   })
+
+  // Inventory quantities per size
+  const [sizeQuantities, setSizeQuantities] = useState(() => {
+    const q = {}
+    if (item?.available_sizes) {
+      item.available_sizes.forEach(s => {
+        const inv = inventory.find(i => i.size === s)
+        q[s] = inv ? inv.quantity : 0
+      })
+    }
+    return q
+  })
+
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
   function set(field, value) { setForm(prev => ({ ...prev, [field]: value })) }
+
+  const parsedSizes = form.available_sizes ? form.available_sizes.split(',').map(s => s.trim()).filter(Boolean) : []
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -221,18 +330,31 @@ function ClothingItemForm({ item, onSaved, onCancel }) {
       name: form.name,
       description: form.description || null,
       category: form.category || null,
-      available_sizes: form.available_sizes ? form.available_sizes.split(',').map(s => s.trim()).filter(Boolean) : [],
+      available_sizes: parsedSizes,
       price: form.price ? parseFloat(form.price) : null,
       is_available: form.is_available,
     }
     try {
+      let itemId = item?.id
       if (item?.id) {
         const { error } = await supabase.from('clothing_items').update(payload).eq('id', item.id)
         if (error) throw error
       } else {
-        const { error } = await supabase.from('clothing_items').insert(payload)
+        const { data, error } = await supabase.from('clothing_items').insert(payload).select('id').single()
         if (error) throw error
+        itemId = data.id
       }
+
+      // Update inventory for each size
+      for (const size of parsedSizes) {
+        const qty = parseInt(sizeQuantities[size]) || 0
+        const { error } = await supabase.from('clothing_inventory').upsert(
+          { item_id: itemId, size, quantity: qty },
+          { onConflict: 'item_id,size' }
+        )
+        if (error) console.error('Inventory update error:', error)
+      }
+
       onSaved()
     } catch (err) { setError(err.message) }
     finally { setSaving(false) }
@@ -265,6 +387,28 @@ function ClothingItemForm({ item, onSaved, onCancel }) {
         <input type="text" value={form.available_sizes} onChange={(e) => set('available_sizes', e.target.value)} placeholder="XS, S, M, L, XL" className={inputClass} />
         <p className="mt-1 text-xs text-gray-400">Separare le taglie con virgola</p>
       </div>
+
+      {/* Quantit\u00e0 per taglia */}
+      {parsedSizes.length > 0 && (
+        <div>
+          <label className="mb-2 block text-sm font-medium text-gray-700">Quantit&agrave; per taglia</label>
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+            {parsedSizes.map(size => (
+              <div key={size} className="text-center">
+                <label className="mb-1 block text-xs font-medium text-gray-500">{size}</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={sizeQuantities[size] ?? 0}
+                  onChange={(e) => setSizeQuantities(prev => ({ ...prev, [size]: e.target.value }))}
+                  className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-center text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500 focus:outline-none"
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div>
         <label className="mb-1 block text-sm font-medium text-gray-700">Prezzo (&euro;)</label>
         <input type="number" step="0.01" value={form.price || ''} onChange={(e) => set('price', e.target.value)} className={inputClass} />
@@ -273,9 +417,17 @@ function ClothingItemForm({ item, onSaved, onCancel }) {
         <label className="mb-1 block text-sm font-medium text-gray-700">Descrizione</label>
         <textarea value={form.description || ''} onChange={(e) => set('description', e.target.value)} rows={2} className={inputClass} />
       </div>
-      <label className="flex items-center gap-2 text-sm">
-        <input type="checkbox" checked={form.is_available} onChange={(e) => set('is_available', e.target.checked)} className="rounded border-gray-300 text-primary-600" />
-        <span>Disponibile</span>
+      <label className="flex items-center gap-3 text-sm">
+        <span className="font-medium text-gray-700">Disponibile</span>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={form.is_available}
+          onClick={() => set('is_available', !form.is_available)}
+          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${form.is_available ? 'bg-primary-600' : 'bg-gray-200'}`}
+        >
+          <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition-transform ${form.is_available ? 'translate-x-5' : 'translate-x-0'}`} />
+        </button>
       </label>
       <div className="flex justify-end gap-3 border-t pt-4">
         <button type="button" onClick={onCancel} className="rounded-lg border border-gray-300 px-4 py-2 text-sm">Annulla</button>
@@ -287,26 +439,21 @@ function ClothingItemForm({ item, onSaved, onCancel }) {
   )
 }
 
-function OrderForm({ items, members, onSaved, onCancel }) {
-  const [form, setForm] = useState({ member_id: '', item_id: '', size: '', quantity: 1, notes: '' })
+function AssignForm({ item, members, onSaved, onCancel }) {
+  const [form, setForm] = useState({ member_id: '', size: '', notes: '' })
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
   function set(field, value) { setForm(prev => ({ ...prev, [field]: value })) }
 
-  const selectedItem = items.find(i => i.id === form.item_id)
-
   async function handleSubmit(e) {
     e.preventDefault()
     setSaving(true)
-    const totalPrice = selectedItem?.price ? selectedItem.price * form.quantity : null
     try {
-      const { error } = await supabase.from('clothing_orders').insert({
+      const { error } = await supabase.from('clothing_assignments').insert({
+        item_id: item.id,
         member_id: form.member_id,
-        item_id: form.item_id,
         size: form.size,
-        quantity: parseInt(form.quantity),
-        total_price: totalPrice,
         notes: form.notes || null,
       })
       if (error) throw error
@@ -327,30 +474,14 @@ function OrderForm({ items, members, onSaved, onCancel }) {
           {members.map(m => <option key={m.id} value={m.id}>{m.last_name} {m.first_name}</option>)}
         </select>
       </div>
-      <div>
-        <label className="mb-1 block text-sm font-medium text-gray-700">Articolo *</label>
-        <select value={form.item_id} onChange={(e) => set('item_id', e.target.value)} required className={inputClass}>
-          <option value="">Seleziona...</option>
-          {items.filter(i => i.is_available).map(i => <option key={i.id} value={i.id}>{i.name} {i.price ? `- € ${Number(i.price).toFixed(2)}` : ''}</option>)}
-        </select>
-      </div>
-      {selectedItem?.available_sizes?.length > 0 && (
+      {item.available_sizes?.length > 0 && (
         <div>
           <label className="mb-1 block text-sm font-medium text-gray-700">Taglia *</label>
           <select value={form.size} onChange={(e) => set('size', e.target.value)} required className={inputClass}>
             <option value="">Seleziona...</option>
-            {selectedItem.available_sizes.map(s => <option key={s} value={s}>{s}</option>)}
+            {item.available_sizes.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
-      )}
-      <div>
-        <label className="mb-1 block text-sm font-medium text-gray-700">Quantit&agrave;</label>
-        <input type="number" min={1} value={form.quantity} onChange={(e) => set('quantity', e.target.value)} className={inputClass} />
-      </div>
-      {selectedItem?.price && (
-        <p className="text-sm font-medium text-gray-700">
-          Totale: &euro; {(selectedItem.price * (form.quantity || 1)).toFixed(2)}
-        </p>
       )}
       <div>
         <label className="mb-1 block text-sm font-medium text-gray-700">Note</label>
@@ -359,7 +490,7 @@ function OrderForm({ items, members, onSaved, onCancel }) {
       <div className="flex justify-end gap-3 border-t pt-4">
         <button type="button" onClick={onCancel} className="rounded-lg border border-gray-300 px-4 py-2 text-sm">Annulla</button>
         <button type="submit" disabled={saving} className="rounded-lg bg-primary-600 px-4 py-2 text-sm text-white hover:bg-primary-700 disabled:opacity-50">
-          {saving ? 'Salvataggio...' : 'Crea Ordine'}
+          {saving ? 'Salvataggio...' : 'Assegna'}
         </button>
       </div>
     </form>

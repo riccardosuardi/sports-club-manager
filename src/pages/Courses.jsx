@@ -86,18 +86,23 @@ export default function Courses() {
     })
   }
 
+  function formatTime(time) {
+    if (!time) return ''
+    return time.slice(0, 5)
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Attivit&agrave;</h1>
-          <p className="text-sm text-gray-500">{courses.length} corsi, {courses.filter(c => c.is_active).length} attivi</p>
+          <p className="text-sm text-gray-500">{courses.length} attivit&agrave;, {courses.filter(c => c.is_active).length} attive</p>
         </div>
         <button
           onClick={() => { setEditing(null); setShowForm(true) }}
           className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-700"
         >
-          <Plus size={18} /> Nuovo Corso
+          <Plus size={18} /> Nuova Attivit&agrave;
         </button>
       </div>
 
@@ -118,7 +123,7 @@ export default function Courses() {
           </button>
         </div>
         <div className="sm:w-80">
-          <SearchInput value={search} onChange={setSearch} placeholder="Cerca corsi..." />
+          <SearchInput value={search} onChange={setSearch} placeholder="Cerca attivit&agrave;..." />
         </div>
       </div>
 
@@ -175,15 +180,16 @@ export default function Courses() {
           </div>
         </div>
       ) : filtered.length === 0 ? (
-        <EmptyState icon={GraduationCap} title="Nessun corso trovato" description="Crea il primo corso" />
+        <EmptyState icon={GraduationCap} title="Nessuna attivit&agrave; trovata" description="Crea la prima attivit&agrave;" />
       ) : (
         /* List view */
         <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Corso</th>
+                <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Attivit&agrave;</th>
                 <th className="hidden px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 md:table-cell">Periodo</th>
+                <th className="hidden px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 md:table-cell">Orario</th>
                 <th className="hidden px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 md:table-cell">Iscritti</th>
                 <th className="hidden px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 md:table-cell">Prezzo</th>
                 <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Stato</th>
@@ -206,10 +212,13 @@ export default function Courses() {
                       {course.end_date && course.end_date !== course.start_date && ` - ${format(parseISO(course.end_date), 'dd/MM/yyyy', { locale: it })}`}
                     </td>
                     <td className="hidden whitespace-nowrap px-4 py-3 text-sm text-gray-600 md:table-cell">
+                      {course.start_time ? `${formatTime(course.start_time)}${course.end_time ? ` - ${formatTime(course.end_time)}` : ''}` : '-'}
+                    </td>
+                    <td className="hidden whitespace-nowrap px-4 py-3 text-sm text-gray-600 md:table-cell">
                       {count}{course.max_participants ? ` / ${course.max_participants}` : ''}
                     </td>
                     <td className="hidden whitespace-nowrap px-4 py-3 text-sm text-gray-600 md:table-cell">
-                      {course.price ? `€ ${Number(course.price).toFixed(2)}` : '-'}
+                      {course.price ? `\u20AC ${Number(course.price).toFixed(2)}` : '-'}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3">
                       <div className="flex gap-1.5">
@@ -290,8 +299,8 @@ export default function Courses() {
         </Modal>
       )}
 
-      {/* Form corso */}
-      <Modal open={showForm} onClose={() => setShowForm(false)} title={editing ? 'Modifica Corso' : 'Nuovo Corso'} size="md">
+      {/* Form attivit\u00e0 */}
+      <Modal open={showForm} onClose={() => setShowForm(false)} title={editing ? 'Modifica Attivit\u00e0' : 'Nuova Attivit\u00e0'} size="md">
         <CourseForm course={editing} onSaved={() => { setShowForm(false); fetchData() }} onCancel={() => setShowForm(false)} />
       </Modal>
 
@@ -299,7 +308,7 @@ export default function Courses() {
         open={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
         onConfirm={() => handleDelete(deleteTarget?.id)}
-        title="Elimina Corso"
+        title="Elimina Attivit\u00e0"
         message={`Sei sicuro di voler eliminare "${deleteTarget?.name}"?`}
         confirmLabel="Elimina"
         danger
@@ -314,15 +323,23 @@ function CourseForm({ course, onSaved, onCancel }) {
     description: course?.description || '',
     start_date: course?.start_date || '',
     end_date: course?.end_date || '',
+    start_time: course?.start_time || '',
+    end_time: course?.end_time || '',
     max_participants: course?.max_participants || '',
     price: course?.price || '',
     is_active: course?.is_active ?? true,
     is_youth: course?.is_youth ?? false,
   })
+  const [multiDay, setMultiDay] = useState(!!(course?.end_date && course.end_date !== course.start_date))
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
   function set(field, value) { setForm(prev => ({ ...prev, [field]: value })) }
+
+  function handleMultiDayToggle(checked) {
+    setMultiDay(checked)
+    if (!checked) set('end_date', '')
+  }
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -330,6 +347,7 @@ function CourseForm({ course, onSaved, onCancel }) {
     setError('')
 
     const payload = { ...form }
+    if (!multiDay) payload.end_date = null
     for (const key of Object.keys(payload)) {
       if (payload[key] === '') payload[key] = null
     }
@@ -359,16 +377,32 @@ function CourseForm({ course, onSaved, onCancel }) {
       {error && <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</div>}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="sm:col-span-2">
-          <label className="mb-1 block text-sm font-medium text-gray-700">Nome Corso *</label>
+          <label className="mb-1 block text-sm font-medium text-gray-700">Nome Attivit&agrave; *</label>
           <input type="text" value={form.name} onChange={(e) => set('name', e.target.value)} required className={inputClass} />
         </div>
         <div>
           <label className="mb-1 block text-sm font-medium text-gray-700">Data Inizio</label>
           <input type="date" value={form.start_date || ''} onChange={(e) => set('start_date', e.target.value)} className={inputClass} />
         </div>
+        <div className="flex items-end">
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={multiDay} onChange={(e) => handleMultiDayToggle(e.target.checked)} className="rounded border-gray-300 text-primary-600" />
+            <span className="text-gray-700">Per pi&ugrave; giorni</span>
+          </label>
+        </div>
+        {multiDay && (
+          <div className="sm:col-span-2">
+            <label className="mb-1 block text-sm font-medium text-gray-700">Data Fine</label>
+            <input type="date" value={form.end_date || ''} onChange={(e) => set('end_date', e.target.value)} min={form.start_date || undefined} className={inputClass} />
+          </div>
+        )}
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Data Fine</label>
-          <input type="date" value={form.end_date || ''} onChange={(e) => set('end_date', e.target.value)} className={inputClass} />
+          <label className="mb-1 block text-sm font-medium text-gray-700">Orario dalle</label>
+          <input type="time" value={form.start_time || ''} onChange={(e) => set('start_time', e.target.value)} className={inputClass} />
+        </div>
+        <div>
+          <label className="mb-1 block text-sm font-medium text-gray-700">Orario alle</label>
+          <input type="time" value={form.end_time || ''} onChange={(e) => set('end_time', e.target.value)} className={inputClass} />
         </div>
         <div>
           <label className="mb-1 block text-sm font-medium text-gray-700">Max Partecipanti</label>
@@ -384,7 +418,7 @@ function CourseForm({ course, onSaved, onCancel }) {
         </div>
         <div>
           <label className="flex items-center gap-3 text-sm">
-            <span className="font-medium text-gray-700">Corso attivo</span>
+            <span className="font-medium text-gray-700">Attivit&agrave; attiva</span>
             <button
               type="button"
               role="switch"
@@ -397,16 +431,24 @@ function CourseForm({ course, onSaved, onCancel }) {
           </label>
         </div>
         <div>
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={form.is_youth} onChange={(e) => set('is_youth', e.target.checked)} className="rounded border-gray-300 text-primary-600" />
-            <span>Attività giovanile</span>
+          <label className="flex items-center gap-3 text-sm">
+            <span className="font-medium text-gray-700">Attivit&agrave; giovanile</span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={form.is_youth}
+              onClick={() => set('is_youth', !form.is_youth)}
+              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${form.is_youth ? 'bg-blue-600' : 'bg-gray-200'}`}
+            >
+              <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition-transform ${form.is_youth ? 'translate-x-5' : 'translate-x-0'}`} />
+            </button>
           </label>
         </div>
       </div>
       <div className="flex justify-end gap-3 border-t pt-4">
         <button type="button" onClick={onCancel} className="rounded-lg border border-gray-300 px-4 py-2 text-sm">Annulla</button>
         <button type="submit" disabled={saving} className="rounded-lg bg-primary-600 px-4 py-2 text-sm text-white hover:bg-primary-700 disabled:opacity-50">
-          {saving ? 'Salvataggio...' : course ? 'Salva' : 'Crea Corso'}
+          {saving ? 'Salvataggio...' : course ? 'Salva' : 'Crea Attivit\u00e0'}
         </button>
       </div>
     </form>

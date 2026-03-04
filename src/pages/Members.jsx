@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Users, AlertTriangle, Upload, Download, Eye, Pencil, Trash2 } from 'lucide-react'
+import { Plus, Users, AlertTriangle, Upload, Download, Eye, Pencil, Trash2, X, FileDown, CheckCircle2, AlertCircle } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { formatDate, isCertificateExpired, isCertificateExpiringSoon, getFullName, calculateAge } from '../lib/utils'
 import Badge from '../components/ui/Badge'
@@ -10,9 +10,28 @@ import Modal from '../components/ui/Modal'
 import ConfirmDialog from '../components/ui/ConfirmDialog'
 import MemberForm from '../components/members/MemberForm'
 
+const IMPORT_COLUMNS = [
+  { header: 'Cognome', field: 'last_name' },
+  { header: 'Nome', field: 'first_name' },
+  { header: 'Codice Fiscale', field: 'fiscal_code' },
+  { header: 'Data Nascita', field: 'date_of_birth' },
+  { header: 'Genere', field: 'gender' },
+  { header: 'Tipologia', field: 'member_type' },
+  { header: 'Tessera', field: 'membership_number' },
+  { header: 'Email', field: 'email' },
+  { header: 'Telefono', field: 'phone' },
+  { header: 'Indirizzo', field: 'address' },
+  { header: 'Citt\u00e0', field: 'city' },
+  { header: 'CAP', field: 'zip_code' },
+  { header: 'Provincia', field: 'province' },
+  { header: 'Stato', field: 'status' },
+  { header: 'Scadenza Cert. Medico', field: 'medical_certificate_expiry' },
+  { header: 'Tipo Cert. Medico', field: 'medical_certificate_type' },
+  { header: 'Note', field: 'notes' },
+]
+
 export default function Members() {
   const navigate = useNavigate()
-  const fileInputRef = useRef()
   const [members, setMembers] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -20,8 +39,7 @@ export default function Members() {
   const [showForm, setShowForm] = useState(false)
   const [editingMember, setEditingMember] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
-  const [importing, setImporting] = useState(false)
-  const [importResult, setImportResult] = useState(null)
+  const [showImportModal, setShowImportModal] = useState(false)
 
   useEffect(() => {
     fetchMembers()
@@ -44,14 +62,9 @@ export default function Members() {
   }
 
   function handleExport() {
-    const headers = ['Cognome', 'Nome', 'Codice Fiscale', 'Data Nascita', 'Genere', 'Tipologia', 'Tessera', 'Email', 'Telefono', 'Indirizzo', 'Città', 'CAP', 'Provincia', 'Stato', 'Scadenza Cert. Medico', 'Tipo Cert. Medico', 'Note']
-    const rows = members.map(m => [
-      m.last_name || '', m.first_name || '', m.fiscal_code || '', m.date_of_birth || '',
-      m.gender || '', m.member_type || '', m.membership_number || '', m.email || '',
-      m.phone || '', m.address || '', m.city || '', m.zip_code || '', m.province || '',
-      m.status || '', m.medical_certificate_expiry || '', m.medical_certificate_type || '', m.notes || '',
-    ])
-    const csv = [headers.join(';'), ...rows.map(r => r.map(v => `"${(v || '').replace(/"/g, '""')}"`).join(';'))].join('\n')
+    const headers = IMPORT_COLUMNS.map(c => c.header)
+    const rows = members.map(m => IMPORT_COLUMNS.map(c => m[c.field] || ''))
+    const csv = [headers.join(';'), ...rows.map(r => r.map(v => `"${(v || '').toString().replace(/"/g, '""')}"`).join(';'))].join('\n')
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -59,59 +72,6 @@ export default function Members() {
     a.download = `atleti_${new Date().toISOString().slice(0, 10)}.csv`
     a.click()
     URL.revokeObjectURL(url)
-  }
-
-  async function handleBulkImport(e) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setImporting(true)
-    setImportResult(null)
-
-    try {
-      const text = await file.text()
-      const lines = text.split(/\r?\n/).filter(l => l.trim())
-      if (lines.length < 2) throw new Error('Il file deve avere almeno una riga di intestazione e una di dati')
-
-      const sep = lines[0].includes(';') ? ';' : ','
-      const headers = lines[0].split(sep).map(h => h.replace(/^"|"$/g, '').trim().toLowerCase())
-
-      const colMap = {
-        cognome: 'last_name', nome: 'first_name', 'codice fiscale': 'fiscal_code',
-        'data nascita': 'date_of_birth', genere: 'gender', tipologia: 'member_type',
-        tessera: 'membership_number', email: 'email', telefono: 'phone',
-        indirizzo: 'address', 'città': 'city', cap: 'zip_code', provincia: 'province',
-        stato: 'status', note: 'notes',
-      }
-
-      let imported = 0
-      let errors = 0
-
-      for (let i = 1; i < lines.length; i++) {
-        const vals = lines[i].split(sep).map(v => v.replace(/^"|"$/g, '').trim())
-        const row = {}
-        headers.forEach((h, idx) => {
-          const field = colMap[h]
-          if (field && vals[idx]) row[field] = vals[idx]
-        })
-
-        if (!row.first_name && !row.last_name) { errors++; continue }
-
-        row.is_member = true
-        row.status = row.status || 'attivo'
-
-        const { error } = await supabase.from('users').insert(row)
-        if (error) errors++
-        else imported++
-      }
-
-      setImportResult({ imported, errors })
-      fetchMembers()
-    } catch (err) {
-      setImportResult({ imported: 0, errors: 0, message: err.message })
-    } finally {
-      setImporting(false)
-      if (fileInputRef.current) fileInputRef.current.value = ''
-    }
   }
 
   const filtered = members.filter((m) => {
@@ -145,10 +105,12 @@ export default function Members() {
           >
             <Download size={16} /> Esporta
           </button>
-          <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
-            <Upload size={16} /> {importing ? 'Importazione...' : 'Importa CSV'}
-            <input ref={fileInputRef} type="file" accept=".csv,.txt" onChange={handleBulkImport} className="hidden" disabled={importing} />
-          </label>
+          <button
+            onClick={() => setShowImportModal(true)}
+            className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
+            <Upload size={16} /> Importa CSV
+          </button>
           <button
             onClick={() => { setEditingMember(null); setShowForm(true) }}
             className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-700"
@@ -157,17 +119,6 @@ export default function Members() {
           </button>
         </div>
       </div>
-
-      {/* Risultato importazione */}
-      {importResult && (
-        <div className={`rounded-lg p-3 text-sm ${importResult.message ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>
-          {importResult.message
-            ? `Errore: ${importResult.message}`
-            : `Importazione completata: ${importResult.imported} atleti importati${importResult.errors > 0 ? `, ${importResult.errors} errori` : ''}`
-          }
-          <button onClick={() => setImportResult(null)} className="ml-2 underline">Chiudi</button>
-        </div>
-      )}
 
       {/* Avvisi certificati */}
       {(stats.expiredCerts > 0 || stats.expiringSoon > 0) && (
@@ -236,7 +187,7 @@ export default function Members() {
                 <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Nome</th>
                 <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Tessera</th>
                 <th className="hidden px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 md:table-cell">Tipo</th>
-                <th className="hidden px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 md:table-cell">Età</th>
+                <th className="hidden px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 md:table-cell">Et&agrave;</th>
                 <th className="hidden px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 lg:table-cell">Genitore</th>
                 <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Stato</th>
                 <th className="hidden px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 md:table-cell">Cert. Medico</th>
@@ -331,16 +282,217 @@ export default function Members() {
         />
       </Modal>
 
+      {/* Modal importazione */}
+      <Modal
+        open={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        title="Importa Atleti da CSV"
+        size="lg"
+      >
+        <ImportAtletiModal
+          onDone={() => { setShowImportModal(false); fetchMembers() }}
+          onCancel={() => setShowImportModal(false)}
+        />
+      </Modal>
+
       {/* Conferma eliminazione */}
       <ConfirmDialog
         open={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
         onConfirm={() => handleDelete(deleteTarget?.id)}
         title="Elimina Atleta"
-        message={`Sei sicuro di voler eliminare ${deleteTarget ? getFullName(deleteTarget) : ''}? Questa azione non può essere annullata.`}
+        message={`Sei sicuro di voler eliminare ${deleteTarget ? getFullName(deleteTarget) : ''}? Questa azione non pu\u00f2 essere annullata.`}
         confirmLabel="Elimina"
         danger
       />
+    </div>
+  )
+}
+
+function ImportAtletiModal({ onDone, onCancel }) {
+  const fileInputRef = useRef()
+  const [step, setStep] = useState('upload') // upload | importing | done
+  const [progress, setProgress] = useState({ current: 0, total: 0 })
+  const [results, setResults] = useState({ imported: 0, errors: [] })
+
+  function handleDownloadTemplate() {
+    const headers = IMPORT_COLUMNS.map(c => c.header)
+    const exampleRow = ['Rossi', 'Mario', 'RSSMRA90A01H501Z', '1990-01-01', 'M', 'adulto', '001', 'mario@email.com', '3331234567', 'Via Roma 1', 'Milano', '20100', 'MI', 'attivo', '2025-12-31', 'agonistico', '']
+    const csv = [headers.join(';'), exampleRow.map(v => `"${v}"`).join(';')].join('\n')
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'template_atleti.csv'
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  async function handleFileSelected(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setStep('importing')
+    const errorsList = []
+    let imported = 0
+
+    try {
+      const text = await file.text()
+      const lines = text.split(/\r?\n/).filter(l => l.trim())
+      if (lines.length < 2) {
+        setResults({ imported: 0, errors: [{ row: 0, message: 'Il file deve avere almeno una riga di intestazione e una di dati' }] })
+        setStep('done')
+        return
+      }
+
+      const sep = lines[0].includes(';') ? ';' : ','
+      const headers = lines[0].split(sep).map(h => h.replace(/^"|"$/g, '').trim().toLowerCase())
+
+      const colMap = {}
+      for (const col of IMPORT_COLUMNS) {
+        colMap[col.header.toLowerCase()] = col.field
+      }
+      // Extra aliases
+      colMap['cognome'] = 'last_name'
+      colMap['nome'] = 'first_name'
+      colMap['codice fiscale'] = 'fiscal_code'
+      colMap['data nascita'] = 'date_of_birth'
+      colMap['genere'] = 'gender'
+      colMap['tipologia'] = 'member_type'
+      colMap['tessera'] = 'membership_number'
+      colMap['telefono'] = 'phone'
+      colMap['indirizzo'] = 'address'
+      colMap['citt\u00e0'] = 'city'
+      colMap['cap'] = 'zip_code'
+      colMap['provincia'] = 'province'
+      colMap['stato'] = 'status'
+      colMap['note'] = 'notes'
+
+      const totalRows = lines.length - 1
+      setProgress({ current: 0, total: totalRows })
+
+      for (let i = 1; i < lines.length; i++) {
+        const vals = lines[i].split(sep).map(v => v.replace(/^"|"$/g, '').trim())
+        const row = {}
+        headers.forEach((h, idx) => {
+          const field = colMap[h]
+          if (field && vals[idx]) row[field] = vals[idx]
+        })
+
+        if (!row.first_name && !row.last_name) {
+          errorsList.push({ row: i + 1, message: 'Nome e cognome mancanti' })
+          setProgress(prev => ({ ...prev, current: i }))
+          continue
+        }
+
+        row.is_member = true
+        row.status = row.status || 'attivo'
+
+        const { error } = await supabase.from('users').insert(row)
+        if (error) {
+          errorsList.push({ row: i + 1, message: error.message })
+        } else {
+          imported++
+        }
+
+        setProgress({ current: i, total: totalRows })
+      }
+    } catch (err) {
+      errorsList.push({ row: 0, message: err.message })
+    }
+
+    setResults({ imported, errors: errorsList })
+    setStep('done')
+  }
+
+  const progressPercent = progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0
+
+  return (
+    <div className="space-y-4">
+      {step === 'upload' && (
+        <>
+          <p className="text-sm text-gray-600">
+            Importa i tuoi atleti da un file CSV. Scarica prima il template per vedere il formato corretto delle colonne.
+          </p>
+          <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-6 text-center">
+            <button
+              onClick={handleDownloadTemplate}
+              className="mb-4 inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              <FileDown size={16} /> Scarica Template CSV
+            </button>
+            <div className="text-sm text-gray-500 mb-4">
+              <p>Colonne supportate:</p>
+              <p className="text-xs text-gray-400 mt-1">{IMPORT_COLUMNS.map(c => c.header).join(' | ')}</p>
+            </div>
+            <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-700">
+              <Upload size={16} /> Seleziona file CSV
+              <input ref={fileInputRef} type="file" accept=".csv,.txt" onChange={handleFileSelected} className="hidden" />
+            </label>
+          </div>
+          <div className="flex justify-end">
+            <button onClick={onCancel} className="rounded-lg border border-gray-300 px-4 py-2 text-sm">Annulla</button>
+          </div>
+        </>
+      )}
+
+      {step === 'importing' && (
+        <div className="space-y-4">
+          <p className="text-sm font-medium text-gray-700">Importazione in corso...</p>
+          <div className="w-full rounded-full bg-gray-200">
+            <div
+              className="h-3 rounded-full bg-primary-600 transition-all duration-300"
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+          <p className="text-sm text-gray-500 text-center">
+            {progress.current} / {progress.total} righe elaborate ({progressPercent}%)
+          </p>
+        </div>
+      )}
+
+      {step === 'done' && (
+        <div className="space-y-4">
+          <div className="flex items-center gap-3 rounded-lg bg-green-50 p-4">
+            <CheckCircle2 size={20} className="text-green-600" />
+            <div>
+              <p className="text-sm font-medium text-green-800">
+                Importazione completata: {results.imported} atleti importati
+              </p>
+              {results.errors.length > 0 && (
+                <p className="text-sm text-red-600">{results.errors.length} errori riscontrati</p>
+              )}
+            </div>
+          </div>
+
+          {results.errors.length > 0 && (
+            <div className="max-h-48 overflow-y-auto rounded-lg border border-red-200 bg-red-50">
+              <div className="p-3">
+                <p className="mb-2 text-sm font-medium text-red-800">Dettaglio errori:</p>
+                <div className="space-y-1">
+                  {results.errors.map((err, idx) => (
+                    <div key={idx} className="flex items-start gap-2 text-xs text-red-700">
+                      <AlertCircle size={14} className="mt-0.5 shrink-0" />
+                      <span>
+                        {err.row > 0 ? `Riga ${err.row}: ` : ''}{err.message}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="flex justify-end">
+            <button
+              onClick={onDone}
+              className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700"
+            >
+              Chiudi
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
-import { Plus, Calendar, MapPin, Clock, Users, Trophy, ChevronLeft, ChevronRight, Filter, Upload, Eye, Pencil, Trash2 } from 'lucide-react'
+import { Plus, Calendar, MapPin, Clock, Users, Trophy, ChevronLeft, ChevronRight, Filter, Upload, Eye, Pencil, Trash2, FileDown, CheckCircle2, AlertCircle } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { formatDate, getFullName } from '../lib/utils'
 import { format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, getDay, addMonths, subMonths, isSameDay, isToday } from 'date-fns'
@@ -40,10 +40,26 @@ const EMPTY_COMPETITION = {
   is_home: false,
 }
 
+const IMPORT_COLUMNS = [
+  { header: 'Nome', field: 'name' },
+  { header: 'Data Gara', field: 'competition_date' },
+  { header: 'Data Fine', field: 'competition_end_date' },
+  { header: 'Ora Inizio', field: 'start_time' },
+  { header: 'Ora Fine', field: 'end_time' },
+  { header: 'Luogo', field: 'location' },
+  { header: 'Indirizzo', field: 'address' },
+  { header: 'Citt\u00e0', field: 'city' },
+  { header: 'Provincia', field: 'province' },
+  { header: 'Stato', field: 'status' },
+  { header: 'Descrizione', field: 'description' },
+  { header: 'Note', field: 'notes' },
+  { header: 'Max Partecipanti', field: 'max_participants' },
+  { header: 'Scadenza Iscrizioni', field: 'registration_deadline' },
+]
+
 export default function Competitions() {
   const { hasRole } = useAuth()
   const canManage = hasRole('admin') || hasRole('segreteria') || hasRole('istruttore')
-  const fileInputRef = useRef()
 
   const [competitions, setCompetitions] = useState([])
   const [members, setMembers] = useState([])
@@ -52,8 +68,7 @@ export default function Competitions() {
   const [viewMode, setViewMode] = useState('calendar')
   const [filterStatus, setFilterStatus] = useState('tutti')
   const [search, setSearch] = useState('')
-  const [importing, setImporting] = useState(false)
-  const [importResult, setImportResult] = useState(null)
+  const [showImportModal, setShowImportModal] = useState(false)
 
   // Modals
   const [showForm, setShowForm] = useState(false)
@@ -119,58 +134,6 @@ export default function Competitions() {
     fetchRegistrations(competitionId)
   }
 
-  async function handleBulkImport(e) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setImporting(true)
-    setImportResult(null)
-
-    try {
-      const text = await file.text()
-      const lines = text.split(/\r?\n/).filter(l => l.trim())
-      if (lines.length < 2) throw new Error('Il file deve avere almeno una riga di intestazione e una di dati')
-
-      const sep = lines[0].includes(';') ? ';' : ','
-      const headers = lines[0].split(sep).map(h => h.replace(/^"|"$/g, '').trim().toLowerCase())
-
-      const colMap = {
-        nome: 'name', 'data gara': 'competition_date', 'data fine': 'competition_end_date',
-        'ora inizio': 'start_time', 'ora fine': 'end_time', luogo: 'location',
-        indirizzo: 'address', 'città': 'city', provincia: 'province',
-        stato: 'status', descrizione: 'description', note: 'notes',
-        'max partecipanti': 'max_participants', 'scadenza iscrizioni': 'registration_deadline',
-      }
-
-      let imported = 0
-      let errors = 0
-
-      for (let i = 1; i < lines.length; i++) {
-        const vals = lines[i].split(sep).map(v => v.replace(/^"|"$/g, '').trim())
-        const row = {}
-        headers.forEach((h, idx) => {
-          const field = colMap[h]
-          if (field && vals[idx]) row[field] = vals[idx]
-        })
-
-        if (!row.name) { errors++; continue }
-        row.status = row.status || 'programmata'
-        if (row.max_participants) row.max_participants = parseInt(row.max_participants, 10)
-
-        const { error } = await supabase.from('competitions').insert(row)
-        if (error) errors++
-        else imported++
-      }
-
-      setImportResult({ imported, errors })
-      fetchData()
-    } catch (err) {
-      setImportResult({ imported: 0, errors: 0, message: err.message })
-    } finally {
-      setImporting(false)
-      if (fileInputRef.current) fileInputRef.current.value = ''
-    }
-  }
-
   // Filtri
   const filtered = competitions.filter((c) => {
     const matchesSearch = !search || c.name.toLowerCase().includes(search.toLowerCase()) || (c.city || '').toLowerCase().includes(search.toLowerCase())
@@ -206,10 +169,12 @@ export default function Competitions() {
         </div>
         {canManage && (
           <div className="flex gap-2">
-            <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
-              <Upload size={16} /> {importing ? 'Importazione...' : 'Importa CSV'}
-              <input ref={fileInputRef} type="file" accept=".csv,.txt,.xlsx" onChange={handleBulkImport} className="hidden" disabled={importing} />
-            </label>
+            <button
+              onClick={() => setShowImportModal(true)}
+              className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              <Upload size={16} /> Importa CSV
+            </button>
             <button
               onClick={() => { setEditingComp(null); setShowForm(true) }}
               className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-700"
@@ -219,17 +184,6 @@ export default function Competitions() {
           </div>
         )}
       </div>
-
-      {/* Risultato importazione */}
-      {importResult && (
-        <div className={`rounded-lg p-3 text-sm ${importResult.message ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>
-          {importResult.message
-            ? `Errore: ${importResult.message}`
-            : `Importazione completata: ${importResult.imported} gare importate${importResult.errors > 0 ? `, ${importResult.errors} errori` : ''}`
-          }
-          <button onClick={() => setImportResult(null)} className="ml-2 underline">Chiudi</button>
-        </div>
-      )}
 
       {/* View toggle + search */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -249,7 +203,7 @@ export default function Competitions() {
         </div>
         <div className="flex gap-3">
           <div className="sm:w-64">
-            <SearchInput value={search} onChange={setSearch} placeholder="Cerca gara, città..." />
+            <SearchInput value={search} onChange={setSearch} placeholder="Cerca gara, citt\u00e0..." />
           </div>
           <select
             value={filterStatus}
@@ -434,6 +388,19 @@ export default function Competitions() {
         />
       </Modal>
 
+      {/* Modal importazione gare */}
+      <Modal
+        open={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        title="Importa Gare da CSV"
+        size="lg"
+      >
+        <ImportGareModal
+          onDone={() => { setShowImportModal(false); fetchData() }}
+          onCancel={() => setShowImportModal(false)}
+        />
+      </Modal>
+
       {/* Dettaglio iscrizioni gara */}
       <Modal
         open={showRegistrations}
@@ -482,7 +449,7 @@ export default function Competitions() {
                               type="text"
                               defaultValue={reg.result || ''}
                               onBlur={(e) => handleUpdateResult(reg.id, e.target.value, selectedComp.id)}
-                              placeholder="Es. 1° posto"
+                              placeholder="Es. 1\u00B0 posto"
                               className="w-32 rounded border border-gray-300 px-2 py-1 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500 focus:outline-none"
                             />
                           ) : (
@@ -551,7 +518,7 @@ export default function Competitions() {
   )
 }
 
-// ---- Form Gara ----
+// ---- Form Gara (with multi-day checkbox like Activities) ----
 function CompetitionForm({ competition, assocSettings, onSaved, onCancel }) {
   const [form, setForm] = useState(
     competition
@@ -567,6 +534,7 @@ function CompetitionForm({ competition, assocSettings, onSaved, onCancel }) {
         }
       : EMPTY_COMPETITION
   )
+  const [multiDay, setMultiDay] = useState(!!(competition?.competition_end_date && competition.competition_end_date !== competition.competition_date))
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -574,14 +542,14 @@ function CompetitionForm({ competition, assocSettings, onSaved, onCancel }) {
     setForm((prev) => ({ ...prev, [field]: value }))
   }
 
+  function handleMultiDayToggle(checked) {
+    setMultiDay(checked)
+    if (!checked) set('competition_end_date', '')
+  }
+
   function handleHomeToggle(checked) {
     set('is_home', checked)
     if (checked && assocSettings) {
-      set('location', assocSettings.name || '')
-      set('address', assocSettings.address || '')
-      set('city', assocSettings.city || '')
-      set('province', assocSettings.province || '')
-      // Need to update all at once
       setForm(prev => ({
         ...prev,
         is_home: true,
@@ -599,6 +567,7 @@ function CompetitionForm({ competition, assocSettings, onSaved, onCancel }) {
     setSaving(true)
 
     const payload = { ...form }
+    if (!multiDay) payload.competition_end_date = null
     for (const key of Object.keys(payload)) {
       if (payload[key] === '') payload[key] = null
     }
@@ -650,10 +619,18 @@ function CompetitionForm({ competition, assocSettings, onSaved, onCancel }) {
           <label className={labelClass}>Data Gara *</label>
           <input type="date" value={form.competition_date} onChange={(e) => set('competition_date', e.target.value)} required className={inputClass} />
         </div>
-        <div>
-          <label className={labelClass}>Data Fine (se più giorni)</label>
-          <input type="date" value={form.competition_end_date || ''} onChange={(e) => set('competition_end_date', e.target.value)} className={inputClass} />
+        <div className="flex items-end">
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={multiDay} onChange={(e) => handleMultiDayToggle(e.target.checked)} className="rounded border-gray-300 text-primary-600" />
+            <span className="text-gray-700">Per pi&ugrave; giorni</span>
+          </label>
         </div>
+        {multiDay && (
+          <div className="sm:col-span-2">
+            <label className={labelClass}>Data Fine</label>
+            <input type="date" value={form.competition_end_date || ''} onChange={(e) => set('competition_end_date', e.target.value)} min={form.competition_date || undefined} className={inputClass} />
+          </div>
+        )}
         <div>
           <label className={labelClass}>Ora Inizio</label>
           <input type="time" value={form.start_time || ''} onChange={(e) => set('start_time', e.target.value)} className={inputClass} />
@@ -674,7 +651,6 @@ function CompetitionForm({ competition, assocSettings, onSaved, onCancel }) {
 
       <h4 className="text-sm font-semibold text-gray-900">Luogo</h4>
 
-      {/* Gara in casa - messo all'inizio della sezione luogo */}
       <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
         <label className="flex items-center gap-3 text-sm">
           <button
@@ -701,7 +677,7 @@ function CompetitionForm({ competition, assocSettings, onSaved, onCancel }) {
           <input type="text" value={form.address || ''} onChange={(e) => set('address', e.target.value)} className={isHomeLocked ? disabledInputClass : inputClass} readOnly={isHomeLocked} />
         </div>
         <div>
-          <label className={labelClass}>Città</label>
+          <label className={labelClass}>Citt&agrave;</label>
           <input type="text" value={form.city || ''} onChange={(e) => set('city', e.target.value)} className={isHomeLocked ? disabledInputClass : inputClass} readOnly={isHomeLocked} />
         </div>
         <div>
@@ -735,6 +711,195 @@ function CompetitionForm({ competition, assocSettings, onSaved, onCancel }) {
         </button>
       </div>
     </form>
+  )
+}
+
+// ---- Import Gare Modal ----
+function ImportGareModal({ onDone, onCancel }) {
+  const fileInputRef = useRef()
+  const [step, setStep] = useState('upload')
+  const [progress, setProgress] = useState({ current: 0, total: 0 })
+  const [results, setResults] = useState({ imported: 0, errors: [] })
+
+  function handleDownloadTemplate() {
+    const headers = IMPORT_COLUMNS.map(c => c.header)
+    const exampleRow = ['Campionato Regionale', '2025-03-15', '', '09:00', '18:00', 'Palazzetto dello Sport', 'Via Roma 1', 'Milano', 'MI', 'programmata', 'Campionato regionale cat. assoluti', '', '50', '2025-03-10']
+    const csv = [headers.join(';'), exampleRow.map(v => `"${v}"`).join(';')].join('\n')
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'template_gare.csv'
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  async function handleFileSelected(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setStep('importing')
+    const errorsList = []
+    let imported = 0
+
+    try {
+      const text = await file.text()
+      const lines = text.split(/\r?\n/).filter(l => l.trim())
+      if (lines.length < 2) {
+        setResults({ imported: 0, errors: [{ row: 0, message: 'Il file deve avere almeno una riga di intestazione e una di dati' }] })
+        setStep('done')
+        return
+      }
+
+      const sep = lines[0].includes(';') ? ';' : ','
+      const headers = lines[0].split(sep).map(h => h.replace(/^"|"$/g, '').trim().toLowerCase())
+
+      const colMap = {}
+      for (const col of IMPORT_COLUMNS) {
+        colMap[col.header.toLowerCase()] = col.field
+      }
+      // Extra aliases
+      colMap['nome'] = 'name'
+      colMap['data gara'] = 'competition_date'
+      colMap['data fine'] = 'competition_end_date'
+      colMap['ora inizio'] = 'start_time'
+      colMap['ora fine'] = 'end_time'
+      colMap['luogo'] = 'location'
+      colMap['indirizzo'] = 'address'
+      colMap['citt\u00e0'] = 'city'
+      colMap['provincia'] = 'province'
+      colMap['stato'] = 'status'
+      colMap['descrizione'] = 'description'
+      colMap['note'] = 'notes'
+      colMap['max partecipanti'] = 'max_participants'
+      colMap['scadenza iscrizioni'] = 'registration_deadline'
+
+      const totalRows = lines.length - 1
+      setProgress({ current: 0, total: totalRows })
+
+      for (let i = 1; i < lines.length; i++) {
+        const vals = lines[i].split(sep).map(v => v.replace(/^"|"$/g, '').trim())
+        const row = {}
+        headers.forEach((h, idx) => {
+          const field = colMap[h]
+          if (field && vals[idx]) row[field] = vals[idx]
+        })
+
+        if (!row.name) {
+          errorsList.push({ row: i + 1, message: 'Nome gara mancante' })
+          setProgress(prev => ({ ...prev, current: i }))
+          continue
+        }
+
+        row.status = row.status || 'programmata'
+        if (row.max_participants) row.max_participants = parseInt(row.max_participants, 10)
+
+        const { error } = await supabase.from('competitions').insert(row)
+        if (error) {
+          errorsList.push({ row: i + 1, message: error.message })
+        } else {
+          imported++
+        }
+
+        setProgress({ current: i, total: totalRows })
+      }
+    } catch (err) {
+      errorsList.push({ row: 0, message: err.message })
+    }
+
+    setResults({ imported, errors: errorsList })
+    setStep('done')
+  }
+
+  const progressPercent = progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0
+
+  return (
+    <div className="space-y-4">
+      {step === 'upload' && (
+        <>
+          <p className="text-sm text-gray-600">
+            Importa le gare da un file CSV. Scarica prima il template per vedere il formato corretto delle colonne.
+          </p>
+          <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-6 text-center">
+            <button
+              onClick={handleDownloadTemplate}
+              className="mb-4 inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              <FileDown size={16} /> Scarica Template CSV
+            </button>
+            <div className="text-sm text-gray-500 mb-4">
+              <p>Colonne supportate:</p>
+              <p className="text-xs text-gray-400 mt-1">{IMPORT_COLUMNS.map(c => c.header).join(' | ')}</p>
+            </div>
+            <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-700">
+              <Upload size={16} /> Seleziona file CSV
+              <input ref={fileInputRef} type="file" accept=".csv,.txt" onChange={handleFileSelected} className="hidden" />
+            </label>
+          </div>
+          <div className="flex justify-end">
+            <button onClick={onCancel} className="rounded-lg border border-gray-300 px-4 py-2 text-sm">Annulla</button>
+          </div>
+        </>
+      )}
+
+      {step === 'importing' && (
+        <div className="space-y-4">
+          <p className="text-sm font-medium text-gray-700">Importazione in corso...</p>
+          <div className="w-full rounded-full bg-gray-200">
+            <div
+              className="h-3 rounded-full bg-primary-600 transition-all duration-300"
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+          <p className="text-sm text-gray-500 text-center">
+            {progress.current} / {progress.total} righe elaborate ({progressPercent}%)
+          </p>
+        </div>
+      )}
+
+      {step === 'done' && (
+        <div className="space-y-4">
+          <div className="flex items-center gap-3 rounded-lg bg-green-50 p-4">
+            <CheckCircle2 size={20} className="text-green-600" />
+            <div>
+              <p className="text-sm font-medium text-green-800">
+                Importazione completata: {results.imported} gare importate
+              </p>
+              {results.errors.length > 0 && (
+                <p className="text-sm text-red-600">{results.errors.length} errori riscontrati</p>
+              )}
+            </div>
+          </div>
+
+          {results.errors.length > 0 && (
+            <div className="max-h-48 overflow-y-auto rounded-lg border border-red-200 bg-red-50">
+              <div className="p-3">
+                <p className="mb-2 text-sm font-medium text-red-800">Dettaglio errori:</p>
+                <div className="space-y-1">
+                  {results.errors.map((err, idx) => (
+                    <div key={idx} className="flex items-start gap-2 text-xs text-red-700">
+                      <AlertCircle size={14} className="mt-0.5 shrink-0" />
+                      <span>
+                        {err.row > 0 ? `Riga ${err.row}: ` : ''}{err.message}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="flex justify-end">
+            <button
+              onClick={onDone}
+              className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700"
+            >
+              Chiudi
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
 
