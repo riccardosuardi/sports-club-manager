@@ -46,7 +46,7 @@ export default function Marketing() {
 
   async function fetchContacts() {
     setLoading(true)
-    const { data } = await supabase.from('users').select('*').eq('is_member', false).order('created_at', { ascending: false })
+    const { data } = await supabase.from('users').select('id, first_name, last_name, email, phone, source, interest, contact_status, notes, last_contacted_at, created_at').eq('is_member', false).order('created_at', { ascending: false })
     setContacts(data || [])
     setLoading(false)
   }
@@ -509,6 +509,10 @@ function ImportContattiModal({ onDone, onCancel }) {
       const totalRows = lines.length - 1
       setProgress({ current: 0, total: totalRows })
 
+      const BATCH_SIZE = 20
+      let batch = []
+      let batchRowNumbers = []
+
       for (let i = 1; i < lines.length; i++) {
         const vals = lines[i].split(sep).map(v => v.replace(/^"|"$/g, '').trim())
         const row = {}
@@ -519,22 +523,30 @@ function ImportContattiModal({ onDone, onCancel }) {
 
         if (!row.first_name && !row.last_name) {
           errorsList.push({ row: i + 1, message: 'Nome e cognome mancanti' })
-          setProgress(prev => ({ ...prev, current: i }))
           continue
         }
 
         row.is_member = false
         row.contact_status = row.contact_status || 'nuovo'
         row.status = 'attivo'
+        batch.push(row)
+        batchRowNumbers.push(i + 1)
 
-        const { error } = await supabase.from('users').insert(row)
-        if (error) {
-          errorsList.push({ row: i + 1, message: error.message })
-        } else {
-          imported++
+        if (batch.length >= BATCH_SIZE || i === lines.length - 1) {
+          const { error } = await supabase.from('users').insert(batch)
+          if (error) {
+            for (let j = 0; j < batch.length; j++) {
+              const { error: rowErr } = await supabase.from('users').insert(batch[j])
+              if (rowErr) errorsList.push({ row: batchRowNumbers[j], message: rowErr.message })
+              else imported++
+            }
+          } else {
+            imported += batch.length
+          }
+          batch = []
+          batchRowNumbers = []
+          setProgress({ current: i, total: totalRows })
         }
-
-        setProgress({ current: i, total: totalRows })
       }
     } catch (err) {
       errorsList.push({ row: 0, message: err.message })

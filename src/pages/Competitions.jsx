@@ -85,7 +85,7 @@ export default function Competitions() {
   async function fetchData() {
     setLoading(true)
     const [compRes, membersRes, assocRes] = await Promise.all([
-      supabase.from('competitions').select('*').order('competition_date', { ascending: true }),
+      supabase.from('competitions').select('id, name, description, competition_date, competition_end_date, start_time, end_time, location, address, city, province, status, max_participants, registration_deadline, notes, is_home, sport').order('competition_date', { ascending: true }),
       supabase.from('users').select('id, first_name, last_name, member_type').eq('is_member', true).eq('status', 'attivo').order('last_name'),
       supabase.from('association_settings').select('*').limit(1).single(),
     ])
@@ -777,6 +777,10 @@ function ImportGareModal({ onDone, onCancel }) {
       const totalRows = lines.length - 1
       setProgress({ current: 0, total: totalRows })
 
+      const BATCH_SIZE = 20
+      let batch = []
+      let batchRowNumbers = []
+
       for (let i = 1; i < lines.length; i++) {
         const vals = lines[i].split(sep).map(v => v.replace(/^"|"$/g, '').trim())
         const row = {}
@@ -787,21 +791,29 @@ function ImportGareModal({ onDone, onCancel }) {
 
         if (!row.name) {
           errorsList.push({ row: i + 1, message: 'Nome gara mancante' })
-          setProgress(prev => ({ ...prev, current: i }))
           continue
         }
 
         row.status = row.status || 'programmata'
         if (row.max_participants) row.max_participants = parseInt(row.max_participants, 10)
+        batch.push(row)
+        batchRowNumbers.push(i + 1)
 
-        const { error } = await supabase.from('competitions').insert(row)
-        if (error) {
-          errorsList.push({ row: i + 1, message: error.message })
-        } else {
-          imported++
+        if (batch.length >= BATCH_SIZE || i === lines.length - 1) {
+          const { error } = await supabase.from('competitions').insert(batch)
+          if (error) {
+            for (let j = 0; j < batch.length; j++) {
+              const { error: rowErr } = await supabase.from('competitions').insert(batch[j])
+              if (rowErr) errorsList.push({ row: batchRowNumbers[j], message: rowErr.message })
+              else imported++
+            }
+          } else {
+            imported += batch.length
+          }
+          batch = []
+          batchRowNumbers = []
+          setProgress({ current: i, total: totalRows })
         }
-
-        setProgress({ current: i, total: totalRows })
       }
     } catch (err) {
       errorsList.push({ row: 0, message: err.message })
