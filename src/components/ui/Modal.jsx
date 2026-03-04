@@ -28,14 +28,14 @@ export default function Modal({ open, onClose, title, children, size = 'md' }) {
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
       onClick={(e) => { if (e.target === overlayRef.current) onClose() }}
     >
-      <div className={`w-full ${sizeClasses[size]} rounded-lg bg-white shadow-xl`}>
-        <div className="flex items-center justify-between border-b px-6 py-4">
+      <div className={`flex w-full ${sizeClasses[size]} max-h-[90vh] flex-col rounded-lg bg-white shadow-xl`}>
+        <div className="flex shrink-0 items-center justify-between border-b px-6 py-4">
           <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
           <button onClick={onClose} className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-500">
             <X size={20} />
           </button>
         </div>
-        <div className="px-6 py-4">{children}</div>
+        <div className="overflow-y-auto px-6 py-4">{children}</div>
       </div>
     </div>
   )

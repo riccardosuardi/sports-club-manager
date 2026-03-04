@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { Plus, Calendar, MapPin, Clock, Users, Trophy, ChevronLeft, ChevronRight, Filter } from 'lucide-react'
+import { useEffect, useState, useRef } from 'react'
+import { Plus, Calendar, MapPin, Clock, Users, Trophy, ChevronLeft, ChevronRight, Filter, Upload, Eye, Pencil, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { formatDate, getFullName } from '../lib/utils'
 import { format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, getDay, addMonths, subMonths, isSameDay, isToday } from 'date-fns'
@@ -25,7 +25,6 @@ const WEEKDAYS = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom']
 const EMPTY_COMPETITION = {
   name: '',
   description: '',
-  sport: '',
   competition_date: '',
   competition_end_date: '',
   start_time: '',
@@ -37,7 +36,6 @@ const EMPTY_COMPETITION = {
   status: 'programmata',
   max_participants: '',
   registration_deadline: '',
-  category: '',
   notes: '',
   is_home: false,
 }
@@ -45,14 +43,17 @@ const EMPTY_COMPETITION = {
 export default function Competitions() {
   const { hasRole } = useAuth()
   const canManage = hasRole('admin') || hasRole('segreteria') || hasRole('istruttore')
+  const fileInputRef = useRef()
 
   const [competitions, setCompetitions] = useState([])
   const [members, setMembers] = useState([])
   const [loading, setLoading] = useState(true)
   const [currentMonth, setCurrentMonth] = useState(new Date())
-  const [viewMode, setViewMode] = useState('calendar') // 'calendar' | 'list'
+  const [viewMode, setViewMode] = useState('calendar')
   const [filterStatus, setFilterStatus] = useState('tutti')
   const [search, setSearch] = useState('')
+  const [importing, setImporting] = useState(false)
+  const [importResult, setImportResult] = useState(null)
 
   // Modals
   const [showForm, setShowForm] = useState(false)
@@ -63,14 +64,19 @@ export default function Competitions() {
   const [registrations, setRegistrations] = useState([])
   const [showEnrollModal, setShowEnrollModal] = useState(false)
 
+  // Association settings for home auto-fill
+  const [assocSettings, setAssocSettings] = useState(null)
+
   async function fetchData() {
     setLoading(true)
-    const [compRes, membersRes] = await Promise.all([
+    const [compRes, membersRes, assocRes] = await Promise.all([
       supabase.from('competitions').select('*').order('competition_date', { ascending: true }),
       supabase.from('users').select('id, first_name, last_name, member_type').eq('is_member', true).eq('status', 'attivo').order('last_name'),
+      supabase.from('association_settings').select('*').limit(1).single(),
     ])
     if (!compRes.error) setCompetitions(compRes.data || [])
     if (!membersRes.error) setMembers(membersRes.data || [])
+    if (assocRes.data) setAssocSettings(assocRes.data)
     setLoading(false)
   }
 
@@ -113,9 +119,61 @@ export default function Competitions() {
     fetchRegistrations(competitionId)
   }
 
+  async function handleBulkImport(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setImporting(true)
+    setImportResult(null)
+
+    try {
+      const text = await file.text()
+      const lines = text.split(/\r?\n/).filter(l => l.trim())
+      if (lines.length < 2) throw new Error('Il file deve avere almeno una riga di intestazione e una di dati')
+
+      const sep = lines[0].includes(';') ? ';' : ','
+      const headers = lines[0].split(sep).map(h => h.replace(/^"|"$/g, '').trim().toLowerCase())
+
+      const colMap = {
+        nome: 'name', 'data gara': 'competition_date', 'data fine': 'competition_end_date',
+        'ora inizio': 'start_time', 'ora fine': 'end_time', luogo: 'location',
+        indirizzo: 'address', 'città': 'city', provincia: 'province',
+        stato: 'status', descrizione: 'description', note: 'notes',
+        'max partecipanti': 'max_participants', 'scadenza iscrizioni': 'registration_deadline',
+      }
+
+      let imported = 0
+      let errors = 0
+
+      for (let i = 1; i < lines.length; i++) {
+        const vals = lines[i].split(sep).map(v => v.replace(/^"|"$/g, '').trim())
+        const row = {}
+        headers.forEach((h, idx) => {
+          const field = colMap[h]
+          if (field && vals[idx]) row[field] = vals[idx]
+        })
+
+        if (!row.name) { errors++; continue }
+        row.status = row.status || 'programmata'
+        if (row.max_participants) row.max_participants = parseInt(row.max_participants, 10)
+
+        const { error } = await supabase.from('competitions').insert(row)
+        if (error) errors++
+        else imported++
+      }
+
+      setImportResult({ imported, errors })
+      fetchData()
+    } catch (err) {
+      setImportResult({ imported: 0, errors: 0, message: err.message })
+    } finally {
+      setImporting(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
   // Filtri
   const filtered = competitions.filter((c) => {
-    const matchesSearch = !search || c.name.toLowerCase().includes(search.toLowerCase()) || (c.sport || '').toLowerCase().includes(search.toLowerCase()) || (c.city || '').toLowerCase().includes(search.toLowerCase())
+    const matchesSearch = !search || c.name.toLowerCase().includes(search.toLowerCase()) || (c.city || '').toLowerCase().includes(search.toLowerCase())
     const matchesStatus = filterStatus === 'tutti' || c.status === filterStatus
     return matchesSearch && matchesStatus
   })
@@ -124,7 +182,6 @@ export default function Competitions() {
   const monthStart = startOfMonth(currentMonth)
   const monthEnd = endOfMonth(currentMonth)
   const calendarDays = eachDayOfInterval({ start: monthStart, end: monthEnd })
-  // getDay() returns 0 for Sunday; shift to Monday-first
   const startDayOffset = (getDay(monthStart) + 6) % 7
 
   function getCompetitionsForDay(day) {
@@ -148,14 +205,31 @@ export default function Competitions() {
           </p>
         </div>
         {canManage && (
-          <button
-            onClick={() => { setEditingComp(null); setShowForm(true) }}
-            className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-700"
-          >
-            <Plus size={18} /> Nuova Gara
-          </button>
+          <div className="flex gap-2">
+            <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+              <Upload size={16} /> {importing ? 'Importazione...' : 'Importa CSV'}
+              <input ref={fileInputRef} type="file" accept=".csv,.txt,.xlsx" onChange={handleBulkImport} className="hidden" disabled={importing} />
+            </label>
+            <button
+              onClick={() => { setEditingComp(null); setShowForm(true) }}
+              className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-700"
+            >
+              <Plus size={18} /> Nuova Gara
+            </button>
+          </div>
         )}
       </div>
+
+      {/* Risultato importazione */}
+      {importResult && (
+        <div className={`rounded-lg p-3 text-sm ${importResult.message ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>
+          {importResult.message
+            ? `Errore: ${importResult.message}`
+            : `Importazione completata: ${importResult.imported} gare importate${importResult.errors > 0 ? `, ${importResult.errors} errori` : ''}`
+          }
+          <button onClick={() => setImportResult(null)} className="ml-2 underline">Chiudi</button>
+        </div>
+      )}
 
       {/* View toggle + search */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -175,7 +249,7 @@ export default function Competitions() {
         </div>
         <div className="flex gap-3">
           <div className="sm:w-64">
-            <SearchInput value={search} onChange={setSearch} placeholder="Cerca gara, sport, città..." />
+            <SearchInput value={search} onChange={setSearch} placeholder="Cerca gara, città..." />
           </div>
           <select
             value={filterStatus}
@@ -193,7 +267,6 @@ export default function Competitions() {
       {/* Calendar view */}
       {viewMode === 'calendar' && (
         <div className="rounded-lg border border-gray-200 bg-white">
-          {/* Month navigation */}
           <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
             <button onClick={() => setCurrentMonth(subMonths(currentMonth, 1))} className="rounded-lg p-2 hover:bg-gray-100">
               <ChevronLeft size={20} />
@@ -205,19 +278,12 @@ export default function Competitions() {
               <ChevronRight size={20} />
             </button>
           </div>
-
-          {/* Weekday headers */}
           <div className="grid grid-cols-7 border-b border-gray-200">
             {WEEKDAYS.map((day) => (
-              <div key={day} className="py-2 text-center text-xs font-medium uppercase text-gray-500">
-                {day}
-              </div>
+              <div key={day} className="py-2 text-center text-xs font-medium uppercase text-gray-500">{day}</div>
             ))}
           </div>
-
-          {/* Calendar grid */}
           <div className="grid grid-cols-7">
-            {/* Empty cells for offset */}
             {Array.from({ length: startDayOffset }).map((_, i) => (
               <div key={`empty-${i}`} className="min-h-24 border-b border-r border-gray-100 bg-gray-50 p-1" />
             ))}
@@ -225,10 +291,7 @@ export default function Competitions() {
               const dayComps = getCompetitionsForDay(day)
               const today = isToday(day)
               return (
-                <div
-                  key={day.toISOString()}
-                  className={`min-h-24 border-b border-r border-gray-100 p-1 ${today ? 'bg-primary-50' : ''}`}
-                >
+                <div key={day.toISOString()} className={`min-h-24 border-b border-r border-gray-100 p-1 ${today ? 'bg-primary-50' : ''}`}>
                   <div className={`mb-1 text-right text-xs font-medium ${today ? 'text-primary-700' : 'text-gray-500'}`}>
                     {format(day, 'd')}
                   </div>
@@ -309,15 +372,6 @@ export default function Competitions() {
                           {[comp.location, comp.city].filter(Boolean).join(', ')}
                         </span>
                       )}
-                      {comp.sport && (
-                        <span className="inline-flex items-center gap-1">
-                          <Trophy size={14} />
-                          {comp.sport}
-                        </span>
-                      )}
-                      {comp.category && (
-                        <span className="text-xs font-medium text-gray-600">Cat: {comp.category}</span>
-                      )}
                       {comp.max_participants && (
                         <span className="inline-flex items-center gap-1">
                           <Users size={14} />
@@ -331,26 +385,29 @@ export default function Competitions() {
                       </p>
                     )}
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex gap-1">
                     <button
                       onClick={() => { setSelectedComp(comp); setShowRegistrations(true); fetchRegistrations(comp.id) }}
-                      className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                      className="rounded-lg p-1.5 text-primary-600 hover:bg-primary-50"
+                      title="Iscritti"
                     >
-                      Iscritti
+                      <Eye size={16} />
                     </button>
                     {canManage && (
                       <>
                         <button
                           onClick={() => { setEditingComp(comp); setShowForm(true) }}
-                          className="text-sm text-gray-600 hover:text-gray-700"
+                          className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100"
+                          title="Modifica"
                         >
-                          Modifica
+                          <Pencil size={16} />
                         </button>
                         <button
                           onClick={() => setDeleteTarget(comp)}
-                          className="text-sm text-red-600 hover:text-red-700"
+                          className="rounded-lg p-1.5 text-red-500 hover:bg-red-50"
+                          title="Elimina"
                         >
-                          Elimina
+                          <Trash2 size={16} />
                         </button>
                       </>
                     )}
@@ -371,6 +428,7 @@ export default function Competitions() {
       >
         <CompetitionForm
           competition={editingComp}
+          assocSettings={assocSettings}
           onSaved={() => { setShowForm(false); fetchData() }}
           onCancel={() => setShowForm(false)}
         />
@@ -385,7 +443,6 @@ export default function Competitions() {
       >
         {selectedComp && (
           <div className="space-y-4">
-            {/* Info gara */}
             <div className="rounded-lg bg-gray-50 p-3 text-sm">
               <div className="flex flex-wrap gap-x-4 gap-y-1 text-gray-600">
                 <span>{formatDate(selectedComp.competition_date)}</span>
@@ -395,7 +452,6 @@ export default function Competitions() {
               </div>
             </div>
 
-            {/* Iscrizioni */}
             {registrations.length === 0 ? (
               <p className="text-sm text-gray-500">Nessun iscritto a questa gara</p>
             ) : (
@@ -437,9 +493,10 @@ export default function Competitions() {
                           <td className="py-2 text-right">
                             <button
                               onClick={() => handleRemoveRegistration(reg.id, selectedComp.id)}
-                              className="text-sm text-red-600 hover:text-red-700"
+                              className="rounded-lg p-1.5 text-red-500 hover:bg-red-50"
+                              title="Rimuovi"
                             >
-                              Rimuovi
+                              <Trash2 size={16} />
                             </button>
                           </td>
                         )}
@@ -450,7 +507,6 @@ export default function Competitions() {
               </div>
             )}
 
-            {/* Iscrivi atleta */}
             {canManage && (
               <button
                 onClick={() => setShowEnrollModal(true)}
@@ -496,7 +552,7 @@ export default function Competitions() {
 }
 
 // ---- Form Gara ----
-function CompetitionForm({ competition, onSaved, onCancel }) {
+function CompetitionForm({ competition, assocSettings, onSaved, onCancel }) {
   const [form, setForm] = useState(
     competition
       ? {
@@ -516,6 +572,25 @@ function CompetitionForm({ competition, onSaved, onCancel }) {
 
   function set(field, value) {
     setForm((prev) => ({ ...prev, [field]: value }))
+  }
+
+  function handleHomeToggle(checked) {
+    set('is_home', checked)
+    if (checked && assocSettings) {
+      set('location', assocSettings.name || '')
+      set('address', assocSettings.address || '')
+      set('city', assocSettings.city || '')
+      set('province', assocSettings.province || '')
+      // Need to update all at once
+      setForm(prev => ({
+        ...prev,
+        is_home: true,
+        location: assocSettings.name || prev.location,
+        address: assocSettings.address || prev.address,
+        city: assocSettings.city || prev.city,
+        province: assocSettings.province || prev.province,
+      }))
+    }
   }
 
   async function handleSubmit(e) {
@@ -549,7 +624,9 @@ function CompetitionForm({ competition, onSaved, onCancel }) {
   }
 
   const inputClass = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500 focus:outline-none'
+  const disabledInputClass = 'w-full rounded-lg border border-gray-200 bg-gray-100 px-3 py-2 text-sm text-gray-500'
   const labelClass = 'mb-1 block text-sm font-medium text-gray-700'
+  const isHomeLocked = form.is_home
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -559,14 +636,6 @@ function CompetitionForm({ competition, onSaved, onCancel }) {
         <div className="sm:col-span-2">
           <label className={labelClass}>Nome Gara *</label>
           <input type="text" value={form.name} onChange={(e) => set('name', e.target.value)} required className={inputClass} />
-        </div>
-        <div>
-          <label className={labelClass}>Sport</label>
-          <input type="text" value={form.sport || ''} onChange={(e) => set('sport', e.target.value)} className={inputClass} placeholder="Es. Nuoto, Atletica..." />
-        </div>
-        <div>
-          <label className={labelClass}>Categoria</label>
-          <input type="text" value={form.category || ''} onChange={(e) => set('category', e.target.value)} className={inputClass} placeholder="Es. Esordienti, Cadetti..." />
         </div>
       </div>
 
@@ -604,22 +673,40 @@ function CompetitionForm({ competition, onSaved, onCancel }) {
       </div>
 
       <h4 className="text-sm font-semibold text-gray-900">Luogo</h4>
+
+      {/* Gara in casa - messo all'inizio della sezione luogo */}
+      <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+        <label className="flex items-center gap-3 text-sm">
+          <button
+            type="button"
+            role="switch"
+            aria-checked={form.is_home}
+            onClick={() => handleHomeToggle(!form.is_home)}
+            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${form.is_home ? 'bg-green-600' : 'bg-gray-200'}`}
+          >
+            <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition-transform ${form.is_home ? 'translate-x-5' : 'translate-x-0'}`} />
+          </button>
+          <span className="font-medium text-gray-700">Gara in casa</span>
+          {form.is_home && <span className="text-xs text-green-600">(campi compilati automaticamente)</span>}
+        </label>
+      </div>
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="sm:col-span-2">
           <label className={labelClass}>Impianto/Luogo</label>
-          <input type="text" value={form.location || ''} onChange={(e) => set('location', e.target.value)} className={inputClass} />
+          <input type="text" value={form.location || ''} onChange={(e) => set('location', e.target.value)} className={isHomeLocked ? disabledInputClass : inputClass} readOnly={isHomeLocked} />
         </div>
         <div>
           <label className={labelClass}>Indirizzo</label>
-          <input type="text" value={form.address || ''} onChange={(e) => set('address', e.target.value)} className={inputClass} />
+          <input type="text" value={form.address || ''} onChange={(e) => set('address', e.target.value)} className={isHomeLocked ? disabledInputClass : inputClass} readOnly={isHomeLocked} />
         </div>
         <div>
           <label className={labelClass}>Città</label>
-          <input type="text" value={form.city || ''} onChange={(e) => set('city', e.target.value)} className={inputClass} />
+          <input type="text" value={form.city || ''} onChange={(e) => set('city', e.target.value)} className={isHomeLocked ? disabledInputClass : inputClass} readOnly={isHomeLocked} />
         </div>
         <div>
           <label className={labelClass}>Provincia</label>
-          <input type="text" value={form.province || ''} onChange={(e) => set('province', e.target.value)} maxLength={2} className={inputClass} />
+          <input type="text" value={form.province || ''} onChange={(e) => set('province', e.target.value)} maxLength={2} className={isHomeLocked ? disabledInputClass : inputClass} readOnly={isHomeLocked} />
         </div>
       </div>
 
@@ -631,17 +718,6 @@ function CompetitionForm({ competition, onSaved, onCancel }) {
               <option key={s.value} value={s.value}>{s.label}</option>
             ))}
           </select>
-        </div>
-        <div className="flex items-end">
-          <label className="flex items-center gap-2 py-2 text-sm">
-            <input
-              type="checkbox"
-              checked={form.is_home}
-              onChange={(e) => set('is_home', e.target.checked)}
-              className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-            />
-            <span className="font-medium text-gray-700">Gara in casa</span>
-          </label>
         </div>
       </div>
 
