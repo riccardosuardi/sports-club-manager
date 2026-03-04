@@ -23,6 +23,7 @@ const EMPTY = {
   medical_certificate_expiry: '',
   medical_certificate_type: '',
   notes: '',
+  preferred_contact_method: '',
 }
 
 export default function MemberForm({ member, members = [], onSaved, onCancel }) {
@@ -166,6 +167,15 @@ export default function MemberForm({ member, members = [], onSaved, onCancel }) 
         <div>
           <label className={labelClass}>Telefono</label>
           <input type="tel" value={form.phone || ''} onChange={(e) => set('phone', e.target.value)} className={inputClass} />
+        </div>
+        <div>
+          <label className={labelClass}>Metodo contatto preferito</label>
+          <select value={form.preferred_contact_method || ''} onChange={(e) => set('preferred_contact_method', e.target.value)} className={inputClass}>
+            <option value="">--</option>
+            <option value="email">Email</option>
+            <option value="whatsapp">WhatsApp</option>
+            <option value="phone">Telefono</option>
+          </select>
         </div>
         <div className="sm:col-span-2">
           <label className={labelClass}>Indirizzo</label>

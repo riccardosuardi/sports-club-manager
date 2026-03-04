@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Baby } from 'lucide-react'
+import { Baby, Eye } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { getFullName, calculateAge, formatDate } from '../lib/utils'
 import Badge from '../components/ui/Badge'
@@ -92,8 +92,8 @@ export default function YouthAthletes() {
                       <Badge status={m.status} />
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-right">
-                      <button onClick={() => navigate(`/atleti/${m.id}`)} className="text-sm text-primary-600 hover:text-primary-700">
-                        Dettagli
+                      <button onClick={() => navigate(`/atleti/${m.id}`)} className="rounded-lg p-1.5 text-primary-600 hover:bg-primary-50" title="Dettagli">
+                        <Eye size={16} />
                       </button>
                     </td>
                   </tr>

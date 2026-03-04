@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Users, Phone, Mail } from 'lucide-react'
+import { Users, Phone, Mail, Eye, MessageCircle } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { getFullName } from '../lib/utils'
 import SearchInput from '../components/ui/SearchInput'
@@ -19,7 +19,7 @@ export default function YouthParents() {
     setLoading(true)
     const { data: allMembers } = await supabase
       .from('users')
-      .select('*')
+      .select('id, first_name, last_name, email, phone, member_type, is_minor, parent_id, preferred_contact_method')
       .eq('is_member', true)
       .order('last_name')
 
@@ -101,9 +101,31 @@ export default function YouthParents() {
                       )}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-right">
-                      <button onClick={() => navigate(`/atleti/${p.id}`)} className="text-sm text-primary-600 hover:text-primary-700">
-                        Dettagli
-                      </button>
+                      <div className="flex justify-end gap-1">
+                        {(() => {
+                          const method = p.preferred_contact_method
+                          const phone = (p.phone || '').replace(/\s+/g, '')
+                          if (method === 'whatsapp' && phone) {
+                            return (
+                              <a href={`https://wa.me/${phone.startsWith('+') ? phone.slice(1) : '39' + phone}`} target="_blank" rel="noopener noreferrer" className="rounded-lg p-1.5 text-green-600 hover:bg-green-50" title="WhatsApp">
+                                <MessageCircle size={16} />
+                              </a>
+                            )
+                          }
+                          if (method === 'phone' && phone) {
+                            return <a href={`tel:${phone}`} className="rounded-lg p-1.5 text-blue-600 hover:bg-blue-50" title="Chiama"><Phone size={16} /></a>
+                          }
+                          if (method === 'email' && p.email) {
+                            return <a href={`mailto:${p.email}`} className="rounded-lg p-1.5 text-orange-600 hover:bg-orange-50" title="Email"><Mail size={16} /></a>
+                          }
+                          if (p.email) return <a href={`mailto:${p.email}`} className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-50" title="Email"><Mail size={16} /></a>
+                          if (phone) return <a href={`tel:${phone}`} className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-50" title="Chiama"><Phone size={16} /></a>
+                          return null
+                        })()}
+                        <button onClick={() => navigate(`/atleti/${p.id}`)} className="rounded-lg p-1.5 text-primary-600 hover:bg-primary-50" title="Dettagli">
+                          <Eye size={16} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 )
