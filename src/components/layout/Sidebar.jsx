@@ -139,7 +139,7 @@ export default function Sidebar({ open, onClose, collapsed, onToggleCollapse }) 
                         onClick={onClose}
                         title={child.name}
                       >
-                        {child.icon ? <child.icon size={16} /> : <span className="h-4 w-4 rounded-full bg-gray-300" />}
+                        <span className={`h-2 w-2 rounded-full ${location.pathname.startsWith(child.to) ? 'bg-primary-600' : 'bg-gray-400'}`} />
                       </NavLink>
                     ))}
                   </div>
