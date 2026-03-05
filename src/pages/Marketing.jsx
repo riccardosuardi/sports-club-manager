@@ -270,6 +270,11 @@ export default function Marketing() {
       const cB = (b.email ? 1 : 0) + (b.phone ? 1 : 0)
       return (cA - cB) * dir
     }
+    if (sortBy === 'age') {
+      const ageA = a.date_of_birth ? new Date(a.date_of_birth).getTime() : 0
+      const ageB = b.date_of_birth ? new Date(b.date_of_birth).getTime() : 0
+      return (ageA - ageB) * dir
+    }
     if (sortBy === 'type') {
       const order = { giovane: 1, adulto: 2 }
       const tA = order[a.member_type] || 99
@@ -575,6 +580,9 @@ export default function Marketing() {
                 <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 cursor-pointer select-none hover:text-gray-700" onClick={() => handleSort('name')}>
                   <span className="inline-flex items-center gap-1">Nome {sortBy === 'name' && (sortDir === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />)}</span>
                 </th>
+                <th className="hidden whitespace-nowrap px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 md:table-cell cursor-pointer select-none hover:text-gray-700" onClick={() => handleSort('age')}>
+                  <span className="inline-flex items-center gap-1">Età {sortBy === 'age' && (sortDir === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />)}</span>
+                </th>
                 <th className="hidden px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 md:table-cell cursor-pointer select-none hover:text-gray-700" onClick={() => handleSort('contacts')}>
                   <span className="inline-flex items-center gap-1">Contatti {sortBy === 'contacts' && (sortDir === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />)}</span>
                 </th>
@@ -598,13 +606,11 @@ export default function Marketing() {
                     />
                   </td>
                   <td className="whitespace-nowrap px-4 py-3">
-                    <p className="font-medium text-gray-900">
-                      {contact.first_name} {contact.last_name}
-                      {contact.date_of_birth && (
-                        <span className="ml-1.5 text-xs font-normal text-gray-400">{calculateAge(contact.date_of_birth)} anni</span>
-                      )}
-                    </p>
+                    <p className="font-medium text-gray-900">{contact.first_name} {contact.last_name}</p>
                     <p className="text-xs text-gray-500">{formatDate(contact.created_at)}</p>
+                  </td>
+                  <td className="hidden whitespace-nowrap px-4 py-3 text-sm text-gray-600 md:table-cell">
+                    {contact.date_of_birth ? `${calculateAge(contact.date_of_birth)}` : '-'}
                   </td>
                   <td className="hidden whitespace-nowrap px-4 py-3 md:table-cell">
                     <div className="space-y-1 text-sm text-gray-600">
