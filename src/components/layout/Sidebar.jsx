@@ -55,6 +55,18 @@ const navigation = [
   },
 ]
 
+function Tooltip({ label, children }) {
+  return (
+    <div className="group relative">
+      {children}
+      <div className="pointer-events-none absolute left-full top-1/2 z-50 ml-2 -translate-y-1/2 whitespace-nowrap rounded-md bg-gray-900 px-2.5 py-1.5 text-xs font-medium text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+        {label}
+        <div className="absolute right-full top-1/2 -translate-y-1/2 border-4 border-transparent border-r-gray-900" />
+      </div>
+    </div>
+  )
+}
+
 export default function Sidebar({ open, onClose, collapsed, onToggleCollapse }) {
   const { hasRole, profile, signOut } = useAuth()
   const location = useLocation()
@@ -142,23 +154,24 @@ export default function Sidebar({ open, onClose, collapsed, onToggleCollapse }) 
                 const showDots = expanded[item.name] || isGroupActive
                 return (
                   <div key={item.name} className="space-y-0.5">
-                    <button
-                      onClick={() => toggleGroup(item.name)}
-                      className={groupButtonClasses(isGroupActive)}
-                      title={item.name}
-                    >
-                      <item.icon size={20} />
-                    </button>
-                    {showDots && item.children.map((child) => (
-                      <NavLink
-                        key={child.to}
-                        to={child.to}
-                        className={linkClasses}
-                        onClick={onClose}
-                        title={child.name}
+                    <Tooltip label={item.name}>
+                      <button
+                        onClick={() => toggleGroup(item.name)}
+                        className={groupButtonClasses(isGroupActive)}
                       >
-                        <span className={`h-2 w-2 rounded-full ${location.pathname.startsWith(child.to) ? 'bg-primary-600' : 'bg-gray-400'}`} />
-                      </NavLink>
+                        <item.icon size={20} />
+                      </button>
+                    </Tooltip>
+                    {showDots && item.children.map((child) => (
+                      <Tooltip key={child.to} label={child.name}>
+                        <NavLink
+                          to={child.to}
+                          className={linkClasses}
+                          onClick={onClose}
+                        >
+                          <span className={`h-2 w-2 rounded-full ${location.pathname.startsWith(child.to) ? 'bg-primary-600' : 'bg-gray-400'}`} />
+                        </NavLink>
+                      </Tooltip>
                     ))}
                   </div>
                 )
@@ -195,6 +208,21 @@ export default function Sidebar({ open, onClose, collapsed, onToggleCollapse }) 
               )
             }
 
+            if (collapsed) {
+              return (
+                <Tooltip key={item.to} label={item.name}>
+                  <NavLink
+                    to={item.to}
+                    className={linkClasses}
+                    onClick={onClose}
+                    end={item.to === '/'}
+                  >
+                    <item.icon size={20} />
+                  </NavLink>
+                </Tooltip>
+              )
+            }
+
             return (
               <NavLink
                 key={item.to}
@@ -202,10 +230,9 @@ export default function Sidebar({ open, onClose, collapsed, onToggleCollapse }) 
                 className={linkClasses}
                 onClick={onClose}
                 end={item.to === '/'}
-                title={item.name}
               >
                 <item.icon size={20} />
-                {!collapsed && item.name}
+                {item.name}
               </NavLink>
             )
           })}
