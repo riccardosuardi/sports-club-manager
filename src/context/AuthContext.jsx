@@ -10,11 +10,15 @@ export function AuthProvider({ children }) {
 
   async function fetchProfile(userId) {
     try {
+      const controller = new AbortController()
+      const abortTimeout = setTimeout(() => controller.abort(), 3000)
       const { data } = await supabase
         .from('users')
         .select('*')
         .eq('auth_id', userId)
         .maybeSingle()
+        .abortSignal(controller.signal)
+      clearTimeout(abortTimeout)
       if (data) {
         data.full_name = [data.first_name, data.last_name].filter(Boolean).join(' ') || data.email
       }
@@ -26,35 +30,39 @@ export function AuthProvider({ children }) {
   }
 
   useEffect(() => {
-    // Timeout di sicurezza: se Supabase non risponde entro 5s, sblocca l'app
-    const timeout = setTimeout(() => setLoading(false), 5000)
+    let mounted = true
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      clearTimeout(timeout)
-      setUser(session?.user ?? null)
-      if (session?.user) {
-        fetchProfile(session.user.id).finally(() => setLoading(false))
-      } else {
+    // Timeout di sicurezza: sblocca l'app dopo 4s qualsiasi cosa succeda
+    const timeout = setTimeout(() => {
+      if (mounted) {
+        console.warn('Auth timeout - sblocco forzato')
         setLoading(false)
       }
-    }).catch(() => {
-      clearTimeout(timeout)
-      setLoading(false)
-    })
+    }, 4000)
 
+    // onAuthStateChange con INITIAL_SESSION e' il modo piu affidabile (Supabase v2.39+)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
+      (_event, session) => {
+        if (!mounted) return
         setUser(session?.user ?? null)
         if (session?.user) {
-          await fetchProfile(session.user.id).catch(() => {})
+          // fetchProfile NON blocca il rendering: usa timeout separato
+          const profileTimeout = setTimeout(() => {
+            if (mounted) setLoading(false)
+          }, 3000)
+          fetchProfile(session.user.id).finally(() => {
+            clearTimeout(profileTimeout)
+            if (mounted) setLoading(false)
+          })
         } else {
           setProfile(null)
+          setLoading(false)
         }
-        setLoading(false)
       }
     )
 
     return () => {
+      mounted = false
       clearTimeout(timeout)
       subscription.unsubscribe()
     }
