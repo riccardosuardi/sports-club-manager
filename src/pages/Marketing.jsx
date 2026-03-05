@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
-import { Plus, Megaphone, UserPlus, Phone, Mail, LayoutList, Columns3, Upload, Download, FileDown, CheckCircle2, AlertCircle, Users, Eye, Pencil, Trash2, MessageCircle, ChevronDown, ChevronRight, GripVertical, Search, X, Link, CheckSquare } from 'lucide-react'
+import { Plus, Megaphone, UserPlus, Phone, Mail, LayoutList, Columns3, Upload, Download, FileDown, CheckCircle2, AlertCircle, Users, Eye, Pencil, Trash2, MessageCircle, ChevronDown, ChevronRight, ChevronUp, GripVertical, Search, X, Link, CheckSquare } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { formatDate, formatDateTime, getFullName, calculateAge } from '../lib/utils'
 import Badge from '../components/ui/Badge'
@@ -99,6 +99,9 @@ export default function Marketing() {
   const [draggedContact, setDraggedContact] = useState(null)
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false)
+  const [filterType, setFilterType] = useState('tutti')
+  const [sortBy, setSortBy] = useState(null) // 'name' | 'contacts' | 'type'
+  const [sortDir, setSortDir] = useState('asc')
 
   useEffect(() => { fetchContacts() }, [])
 
@@ -228,13 +231,43 @@ export default function Marketing() {
     setBulkDeleteConfirm(false)
   }
 
+  function handleSort(column) {
+    if (sortBy === column) {
+      setSortDir(prev => prev === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortBy(column)
+      setSortDir('asc')
+    }
+  }
+
   const filtered = contacts.filter((c) => {
     const matchesSearch = !search ||
       `${c.first_name} ${c.last_name}`.toLowerCase().includes(search.toLowerCase()) ||
       (c.email || '').toLowerCase().includes(search.toLowerCase()) ||
       (c.parent ? `${c.parent.first_name} ${c.parent.last_name}`.toLowerCase().includes(search.toLowerCase()) : false)
     const matchesStatus = filterStatus === 'tutti' || c.contact_status === filterStatus
-    return matchesSearch && matchesStatus
+    const matchesType = filterType === 'tutti' || (c.member_type || '') === filterType
+    return matchesSearch && matchesStatus && matchesType
+  }).sort((a, b) => {
+    if (!sortBy) return 0
+    const dir = sortDir === 'asc' ? 1 : -1
+    if (sortBy === 'name') {
+      const nameA = `${a.last_name} ${a.first_name}`.toLowerCase()
+      const nameB = `${b.last_name} ${b.first_name}`.toLowerCase()
+      return nameA.localeCompare(nameB) * dir
+    }
+    if (sortBy === 'contacts') {
+      const cA = (a.email ? 1 : 0) + (a.phone ? 1 : 0)
+      const cB = (b.email ? 1 : 0) + (b.phone ? 1 : 0)
+      return (cA - cB) * dir
+    }
+    if (sortBy === 'type') {
+      const order = { giovane: 1, adulto: 2, genitore: 3 }
+      const tA = order[a.member_type] || 99
+      const tB = order[b.member_type] || 99
+      return (tA - tB) * dir
+    }
+    return 0
   })
 
   // Group contacts by parent for parent view
@@ -347,6 +380,18 @@ export default function Marketing() {
                   }`}
                 >
                   {s}
+                </button>
+              ))}
+              <div className="w-px bg-gray-200" />
+              {[{ value: 'tutti', label: 'Tutte' }, ...MEMBER_TYPES].map((t) => (
+                <button
+                  key={t.value}
+                  onClick={() => setFilterType(t.value)}
+                  className={`rounded-lg px-3 py-2 text-sm font-medium ${
+                    filterType === t.value ? 'bg-primary-100 text-primary-700' : 'text-gray-500 hover:bg-gray-100'
+                  }`}
+                >
+                  {t.label || t.value}
                 </button>
               ))}
             </div>
@@ -543,12 +588,18 @@ export default function Marketing() {
                     className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
                   />
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Nome</th>
-                <th className="hidden px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 md:table-cell">Contatti</th>
+                <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 cursor-pointer select-none hover:text-gray-700" onClick={() => handleSort('name')}>
+                  <span className="inline-flex items-center gap-1">Nome {sortBy === 'name' && (sortDir === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />)}</span>
+                </th>
+                <th className="hidden px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 md:table-cell cursor-pointer select-none hover:text-gray-700" onClick={() => handleSort('contacts')}>
+                  <span className="inline-flex items-center gap-1">Contatti {sortBy === 'contacts' && (sortDir === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />)}</span>
+                </th>
                 <th className="hidden px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 lg:table-cell">Genitore</th>
                 <th className="hidden px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 lg:table-cell">Fonte</th>
                 <th className="hidden px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 lg:table-cell">Interesse</th>
-                <th className="hidden px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 lg:table-cell">Tipologia</th>
+                <th className="hidden px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 lg:table-cell cursor-pointer select-none hover:text-gray-700" onClick={() => handleSort('type')}>
+                  <span className="inline-flex items-center gap-1">Tipologia {sortBy === 'type' && (sortDir === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />)}</span>
+                </th>
                 <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Stato</th>
                 <th className="hidden px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 md:table-cell">Ultimo contatto</th>
                 <th className="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500">Azioni</th>
