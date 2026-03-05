@@ -9,15 +9,20 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true)
 
   async function fetchProfile(userId) {
-    const { data } = await supabase
-      .from('users')
-      .select('*')
-      .eq('auth_id', userId)
-      .single()
-    if (data) {
-      data.full_name = [data.first_name, data.last_name].filter(Boolean).join(' ') || data.email
+    try {
+      const { data } = await supabase
+        .from('users')
+        .select('*')
+        .eq('auth_id', userId)
+        .maybeSingle()
+      if (data) {
+        data.full_name = [data.first_name, data.last_name].filter(Boolean).join(' ') || data.email
+      }
+      setProfile(data)
+    } catch (err) {
+      console.error('fetchProfile error:', err)
+      setProfile(null)
     }
-    setProfile(data)
   }
 
   useEffect(() => {
