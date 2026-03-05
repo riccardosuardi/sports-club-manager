@@ -1,10 +1,12 @@
+import { forwardRef } from 'react'
 import { Search } from 'lucide-react'
 
-export default function SearchInput({ value, onChange, placeholder = 'Cerca...' }) {
+const SearchInput = forwardRef(function SearchInput({ value, onChange, placeholder = 'Cerca...' }, ref) {
   return (
     <div className="relative">
       <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
       <input
+        ref={ref}
         type="text"
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -13,4 +15,6 @@ export default function SearchInput({ value, onChange, placeholder = 'Cerca...' 
       />
     </div>
   )
-}
+})
+
+export default SearchInput
