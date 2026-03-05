@@ -134,6 +134,128 @@ export default function Marketing() {
     }
   }
 
+  async function handleBulkDataFix() {
+    const updates = [
+      ['Joachimowicz', 'Agata', null, 'adulto'],
+      ['Longatti', 'Letizia Agnieszka', '2016-01-10', 'giovane'],
+      ['Ermatova', 'Zirek', null, 'adulto'],
+      ['Ermatova', 'Khadizha', '2016-12-29', 'giovane'],
+      ['Mandaglio', 'Sonia', null, 'adulto'],
+      ['Busana', 'Paolo', '2015-01-05', 'giovane'],
+      ['Sortino', 'Mary', null, 'adulto'],
+      ['Albano', 'Emanuel', '2014-10-08', 'giovane'],
+      ['Turci', 'Edoardo', '2019-07-31', 'giovane'],
+      ['Trombello', 'Paolo', null, 'adulto'],
+      ['Trombello', 'Ines', '2017-12-06', 'giovane'],
+      ['Hanna', 'Grace', null, 'adulto'],
+      ['Cipollini', 'Nicole', '2016-01-23', 'giovane'],
+      ['Mytyanska', 'Lidiya', null, 'adulto'],
+      ['Marciano', 'Erik', '2016-12-07', 'giovane'],
+      ['Marciano', 'Elizabeth', '2019-04-27', 'giovane'],
+      ['De Marco', 'Sara', null, 'adulto'],
+      ['Ciafani', 'Irene', '2016-09-27', 'giovane'],
+      ['Zazzi', 'Valeria', null, 'adulto'],
+      ['Barbieri', 'Jacopo', '2016-06-16', 'giovane'],
+      ['Prudente', 'Inna', null, 'adulto'],
+      ['Prudente', 'Isabel', '2013-11-13', 'giovane'],
+      ['De Lucchi', 'Andrea', null, 'adulto'],
+      ['De Lucchi', 'Tommaso', '2016-12-07', 'giovane'],
+      ['De Lucchi', 'Giancarlo', '2021-02-11', 'giovane'],
+      ['Cangelosi', 'Marco', null, 'adulto'],
+      ['Cangelosi', 'Valerio', '2017-11-03', 'giovane'],
+      ['Cangelosi', 'Antonio', '2022-10-22', 'giovane'],
+      [null, 'Elena', null, 'adulto'],
+      ['Lo Piccolo', 'Tommaso M.', '2018-07-15', 'giovane'],
+      ['Venuto', 'Debora', null, 'adulto'],
+      ['Rinaudo', 'Giulia', null, 'giovane'],
+      [null, 'Jiane', null, 'adulto'],
+      ['Lee', 'Roa', '2017-09-10', 'giovane'],
+      ['Lee', 'Roon', '2020-03-18', 'giovane'],
+      ['Oregioni', 'Sara', null, 'adulto'],
+      ['Paggi', 'Alessia', '2016-04-20', 'giovane'],
+      ['Paggi', 'Beatrice', '2020-04-28', 'giovane'],
+      ['Urso', 'Rosa L.', null, 'adulto'],
+      ['Vassallo', 'Federico', '2019-12-06', 'giovane'],
+      ['Brambilla', 'Grazia', null, 'adulto'],
+      ['Cigardi', 'Riccardo', null, 'giovane'],
+      ['Marcotto', 'Pier', null, 'adulto'],
+      ['Marcotto', 'Bianca Sofia', '2020-02-21', 'giovane'],
+      ['Borzi', 'Viki', null, 'adulto'],
+      ['Borzi', 'Davide', null, 'giovane'],
+      ['Borzi', 'Lucia', null, 'giovane'],
+      ['Frigerio', 'Myriam', null, 'adulto'],
+      ['Lombardi', 'Alessio', '2016-03-30', 'giovane'],
+      ['Demian', 'Narcisa', null, 'adulto'],
+      ['Poli', 'Sebastian', '2020-10-06', 'giovane'],
+      [null, 'Loana', null, 'adulto'],
+      ['Figueira', 'Leo', '2017-02-06', 'giovane'],
+      ['Introzzi', 'Jacqueline', null, 'adulto'],
+      ['Peiti', 'Isabel', '2018-02-14', 'giovane'],
+      ['Peiti', 'Karen', '2020-08-19', 'giovane'],
+      ['Dudko', 'Tatiana', null, 'adulto'],
+      ['Bilen', 'Michail', '2014-01-06', 'giovane'],
+      ['Orza', 'Crina Bianca', null, 'adulto'],
+      ['Orza', 'Anda', '2016-05-16', 'giovane'],
+      ['Falzone', 'Carla', null, 'adulto'],
+      ['Manfroi Giancarlo', 'Giorgio', '2019-07-30', 'giovane'],
+      ['Serediuk', 'Taras', null, 'adulto'],
+      ['Serediuk', 'Ivan', '2010-05-20', 'giovane'],
+      ['Serediuk', 'Artem', '2019-10-16', 'giovane'],
+      ['Montagna', 'Marina', null, 'adulto'],
+      ['Ronchi', 'Laura', null, 'giovane'],
+      ['Ronchi', 'Rachele', null, 'giovane'],
+      ['Zaffaroni', 'Maurizio', null, 'adulto'],
+      ['Graziani', 'Vera', '2019-02-21', 'giovane'],
+      ['Boffi', 'Luca', null, 'adulto'],
+      ['Boffi', 'Lucia', null, 'giovane'],
+      ['Boffi', 'Paolo', null, 'giovane'],
+      ['Stella', 'Cristian', null, 'adulto'],
+      ['Stella', 'William', null, 'giovane'],
+      ['Stella', 'Francesco', null, 'giovane'],
+      ['Stella', 'Leonardo', null, 'giovane'],
+      ['Kurzlechner', 'Sandra', null, 'adulto'],
+      ['Kurzlechner', 'Alizee', '2015-10-14', 'giovane'],
+      ['Kurzlechner', 'Alexa', '2018-03-10', 'giovane'],
+      ['Kurzlechner', 'Alenie', '2020-10-20', 'giovane'],
+      ['Pozzi', 'Valentina', null, 'adulto'],
+      ['Roda', 'Alessandro', '2019-12-23', 'giovane'],
+      ['Valtolina', 'Erika', null, 'adulto'],
+      ['Fedrici', 'Caecilia', '2019-10-14', 'giovane'],
+    ]
+
+    let updated = 0, notFound = 0, errors = 0
+    const notFoundList = []
+
+    for (const [lastName, firstName, dob, memberType] of updates) {
+      const match = contacts.find(c => {
+        const fnMatch = (c.first_name || '').toLowerCase().trim() === (firstName || '').toLowerCase().trim()
+        const lnMatch = (c.last_name || '').toLowerCase().trim() === (lastName || '').toLowerCase().trim()
+        return fnMatch && lnMatch
+      })
+
+      if (!match) {
+        notFoundList.push(`${firstName} ${lastName}`)
+        notFound++
+        continue
+      }
+
+      const payload = { member_type: memberType }
+      if (dob) payload.date_of_birth = dob
+
+      const { error } = await supabase.from('users').update(payload).eq('id', match.id)
+      if (error) {
+        console.error(`Error: ${firstName} ${lastName}:`, error.message)
+        errors++
+      } else {
+        updated++
+      }
+    }
+
+    if (notFoundList.length > 0) console.log('Not found:', notFoundList)
+    alert(`Aggiornamento completato!\n${updated} aggiornati\n${notFound} non trovati\n${errors} errori${notFoundList.length > 0 ? '\n\nNon trovati: ' + notFoundList.join(', ') : ''}`)
+    fetchContacts()
+  }
+
   async function handleDelete(id) {
     await supabase.from('users').delete().eq('id', id)
     fetchContacts()
@@ -347,6 +469,13 @@ export default function Marketing() {
           </p>
         </div>
         <div className="flex gap-2">
+          <button
+            onClick={handleBulkDataFix}
+            className="inline-flex items-center gap-2 rounded-lg border border-orange-300 bg-orange-50 px-3 py-2 text-sm font-medium text-orange-700 hover:bg-orange-100"
+            title="Aggiorna tipologia e data nascita da lista"
+          >
+            <CheckCircle2 size={16} /> Fix Dati
+          </button>
           <button
             onClick={handleExport}
             className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
