@@ -4,19 +4,36 @@ import { AuthProvider, useAuth } from './context/AuthContext'
 import Layout from './components/layout/Layout'
 import Login from './pages/Login'
 
+// Retry dynamic import: se il chunk non esiste più (nuovo deploy), ricarica la pagina
+function lazyRetry(importFn) {
+  return lazy(() =>
+    importFn().catch(() => {
+      // Evita loop infinito: ricarica solo una volta
+      const key = 'chunk_reload'
+      if (!sessionStorage.getItem(key)) {
+        sessionStorage.setItem(key, '1')
+        window.location.reload()
+        return new Promise(() => {}) // blocca render durante il reload
+      }
+      sessionStorage.removeItem(key)
+      return importFn() // secondo tentativo, lascia fallire se ancora rotto
+    })
+  )
+}
+
 // Lazy-load all pages
-const Dashboard = lazy(() => import('./pages/Dashboard'))
-const Members = lazy(() => import('./pages/Members'))
-const MemberDetail = lazy(() => import('./pages/MemberDetail'))
-const Courses = lazy(() => import('./pages/Courses'))
-const Clothing = lazy(() => import('./pages/Clothing'))
-const Competitions = lazy(() => import('./pages/Competitions'))
-const Marketing = lazy(() => import('./pages/Marketing'))
-const SettingsUser = lazy(() => import('./pages/SettingsUser'))
-const SettingsAssociation = lazy(() => import('./pages/SettingsAssociation'))
-const YouthAthletes = lazy(() => import('./pages/YouthAthletes'))
-const YouthParents = lazy(() => import('./pages/YouthParents'))
-const YouthCourses = lazy(() => import('./pages/YouthCourses'))
+const Dashboard = lazyRetry(() => import('./pages/Dashboard'))
+const Members = lazyRetry(() => import('./pages/Members'))
+const MemberDetail = lazyRetry(() => import('./pages/MemberDetail'))
+const Courses = lazyRetry(() => import('./pages/Courses'))
+const Clothing = lazyRetry(() => import('./pages/Clothing'))
+const Competitions = lazyRetry(() => import('./pages/Competitions'))
+const Marketing = lazyRetry(() => import('./pages/Marketing'))
+const SettingsUser = lazyRetry(() => import('./pages/SettingsUser'))
+const SettingsAssociation = lazyRetry(() => import('./pages/SettingsAssociation'))
+const YouthAthletes = lazyRetry(() => import('./pages/YouthAthletes'))
+const YouthParents = lazyRetry(() => import('./pages/YouthParents'))
+const YouthCourses = lazyRetry(() => import('./pages/YouthCourses'))
 
 function PageLoader() {
   return (
