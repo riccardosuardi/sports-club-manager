@@ -74,7 +74,6 @@ export default function Sidebar({ open, onClose, collapsed, onToggleCollapse }) 
   })
 
   function toggleGroup(name) {
-    if (collapsed) return
     setExpanded((prev) => ({ ...prev, [name]: !prev[name] }))
   }
 
@@ -126,12 +125,17 @@ export default function Sidebar({ open, onClose, collapsed, onToggleCollapse }) 
               const isOpen = !collapsed && (expanded[item.name] || isGroupActive)
 
               if (collapsed) {
+                const showDots = expanded[item.name] || isGroupActive
                 return (
                   <div key={item.name} className="space-y-0.5">
-                    <div className={`${groupButtonClasses(isGroupActive)} pointer-events-none opacity-60`} title={item.name}>
+                    <button
+                      onClick={() => toggleGroup(item.name)}
+                      className={groupButtonClasses(isGroupActive)}
+                      title={item.name}
+                    >
                       <item.icon size={20} />
-                    </div>
-                    {item.children.map((child) => (
+                    </button>
+                    {showDots && item.children.map((child) => (
                       <NavLink
                         key={child.to}
                         to={child.to}
