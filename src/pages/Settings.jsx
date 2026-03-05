@@ -15,13 +15,18 @@ export default function Settings() {
 
   async function fetchAuthUsers() {
     setLoading(true)
-    const { data } = await supabase
-      .from('users')
-      .select('*')
-      .not('auth_id', 'is', null)
-      .order('first_name')
-    setAuthUsers(data || [])
-    setLoading(false)
+    try {
+      const { data } = await supabase
+        .from('users')
+        .select('*')
+        .not('auth_id', 'is', null)
+        .order('first_name')
+      setAuthUsers(data || [])
+    } catch (err) {
+      console.error('Settings fetch error:', err)
+    } finally {
+      setLoading(false)
+    }
   }
 
   async function handleRoleChange(userId, newRole) {

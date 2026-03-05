@@ -97,13 +97,19 @@ export default function Marketing() {
 
   async function fetchContacts() {
     setLoading(true)
-    const { data } = await supabase
-      .from('users')
-      .select('id, first_name, last_name, email, phone, source, interest, contact_status, notes, last_contacted_at, created_at, parent_id, preferred_contact_method, parent:parent_id(id, first_name, last_name, email, phone, preferred_contact_method)')
-      .eq('is_member', false)
-      .order('created_at', { ascending: false })
-    setContacts(data || [])
-    setLoading(false)
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('id, first_name, last_name, email, phone, source, interest, contact_status, notes, last_contacted_at, created_at, parent_id, preferred_contact_method, parent:parent_id(id, first_name, last_name, email, phone, preferred_contact_method)')
+        .eq('is_member', false)
+        .order('created_at', { ascending: false })
+      if (error) console.error('Marketing query error:', error)
+      setContacts(data || [])
+    } catch (err) {
+      console.error('Marketing fetch error:', err)
+    } finally {
+      setLoading(false)
+    }
   }
 
   async function handleDelete(id) {
@@ -799,6 +805,7 @@ function ContactForm({ contact, contacts = [], onSaved, onCancel }) {
       } else {
         payload.is_member = false
         payload.status = 'attivo'
+        payload.contact_status = payload.contact_status || 'nuovo'
         const { error } = await supabase.from('users').insert(payload)
         if (error) throw error
       }

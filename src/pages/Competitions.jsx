@@ -105,12 +105,16 @@ export default function Competitions() {
   }, [])
 
   async function fetchRegistrations(competitionId) {
-    const { data } = await supabase
-      .from('competition_registrations')
-      .select('*, member:member_id(id, first_name, last_name, member_type)')
-      .eq('competition_id', competitionId)
-      .order('registered_at')
-    setRegistrations(data || [])
+    try {
+      const { data } = await supabase
+        .from('competition_registrations')
+        .select('*, member:member_id(id, first_name, last_name, member_type)')
+        .eq('competition_id', competitionId)
+        .order('registered_at')
+      setRegistrations(data || [])
+    } catch (err) {
+      console.error('Registrations fetch error:', err)
+    }
   }
 
   async function handleDelete(id) {
@@ -728,7 +732,7 @@ function ImportGareModal({ onDone, onCancel }) {
 
   function handleDownloadTemplate() {
     const headers = IMPORT_COLUMNS.map(c => c.header)
-    const exampleRow = ['Campionato Regionale', '2025-03-15', '', '09:00', '18:00', 'Palazzetto dello Sport', 'Via Roma 1', 'Milano', 'MI', 'programmata', 'Campionato regionale cat. assoluti', '', '50', '2025-03-10']
+    const exampleRow = ['Campionato Regionale', '15/03/2025', '', '09:00', '18:00', 'Palazzetto dello Sport', 'Via Roma 1', 'Milano', 'MI', 'programmata', 'Campionato regionale cat. assoluti', '', '50', '10/03/2025']
     const csv = [headers.join(';'), exampleRow.map(v => `"${v}"`).join(';')].join('\n')
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
@@ -794,6 +798,17 @@ function ImportGareModal({ onDone, onCancel }) {
           errorsList.push({ row: i + 1, message: 'Nome gara mancante' })
           setProgress({ current: i, total: totalRows })
           continue
+        }
+
+        // Parse European date format DD/MM/YYYY to YYYY-MM-DD for date fields
+        for (const dateField of ['competition_date', 'competition_end_date', 'registration_deadline']) {
+          if (row[dateField]) {
+            const val = row[dateField].trim()
+            const ddmmyyyy = val.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})$/)
+            if (ddmmyyyy) {
+              row[dateField] = `${ddmmyyyy[3]}-${ddmmyyyy[2].padStart(2, '0')}-${ddmmyyyy[1].padStart(2, '0')}`
+            }
+          }
         }
 
         row.status = row.status || 'programmata'

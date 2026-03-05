@@ -47,13 +47,18 @@ export default function Members() {
 
   async function fetchMembers() {
     setLoading(true)
-    const { data, error } = await supabase
-      .from('users')
-      .select('id, first_name, last_name, email, fiscal_code, membership_number, member_type, date_of_birth, is_minor, status, medical_certificate_expiry, phone, gender, address, city, zip_code, province, notes, medical_certificate_type, created_at, parent_id, parent:parent_id(id, first_name, last_name)')
-      .eq('is_member', true)
-      .order('last_name')
-    if (!error) setMembers(data || [])
-    setLoading(false)
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('id, first_name, last_name, email, fiscal_code, membership_number, member_type, date_of_birth, is_minor, status, medical_certificate_expiry, phone, gender, address, city, zip_code, province, notes, medical_certificate_type, created_at, parent_id, parent:parent_id(id, first_name, last_name)')
+        .eq('is_member', true)
+        .order('last_name')
+      if (!error) setMembers(data || [])
+    } catch (err) {
+      console.error('Members fetch error:', err)
+    } finally {
+      setLoading(false)
+    }
   }
 
   async function handleDelete(id) {
@@ -62,8 +67,17 @@ export default function Members() {
   }
 
   function handleExport() {
+    const dateFields = ['date_of_birth', 'medical_certificate_expiry']
     const headers = IMPORT_COLUMNS.map(c => c.header)
-    const rows = members.map(m => IMPORT_COLUMNS.map(c => m[c.field] || ''))
+    const rows = members.map(m => IMPORT_COLUMNS.map(c => {
+      const val = m[c.field] || ''
+      // Convert YYYY-MM-DD to DD/MM/YYYY for export
+      if (dateFields.includes(c.field) && val && /^\d{4}-\d{2}-\d{2}/.test(val)) {
+        const [y, mo, d] = val.split('-')
+        return `${d}/${mo}/${y}`
+      }
+      return val
+    }))
     const csv = [headers.join(';'), ...rows.map(r => r.map(v => `"${(v || '').toString().replace(/"/g, '""')}"`).join(';'))].join('\n')
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
@@ -317,7 +331,7 @@ function ImportAtletiModal({ onDone, onCancel }) {
 
   function handleDownloadTemplate() {
     const headers = IMPORT_COLUMNS.map(c => c.header)
-    const exampleRow = ['Rossi', 'Mario', 'RSSMRA90A01H501Z', '1990-01-01', 'M', 'adulto', '001', 'mario@email.com', '3331234567', 'Via Roma 1', 'Milano', '20100', 'MI', 'attivo', '2025-12-31', 'agonistico', '']
+    const exampleRow = ['Rossi', 'Mario', 'RSSMRA90A01H501Z', '01/01/1990', 'M', 'adulto', '001', 'mario@email.com', '3331234567', 'Via Roma 1', 'Milano', '20100', 'MI', 'attivo', '31/12/2025', 'agonistico', '']
     const csv = [headers.join(';'), exampleRow.map(v => `"${v}"`).join(';')].join('\n')
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
@@ -383,6 +397,18 @@ function ImportAtletiModal({ onDone, onCancel }) {
           errorsList.push({ row: i + 1, message: 'Nome e cognome mancanti' })
           setProgress({ current: i, total: totalRows })
           continue
+        }
+
+        // Parse European date format DD/MM/YYYY to YYYY-MM-DD for date fields
+        for (const dateField of ['date_of_birth', 'medical_certificate_expiry']) {
+          if (row[dateField]) {
+            const val = row[dateField].trim()
+            const ddmmyyyy = val.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})$/)
+            if (ddmmyyyy) {
+              row[dateField] = `${ddmmyyyy[3]}-${ddmmyyyy[2].padStart(2, '0')}-${ddmmyyyy[1].padStart(2, '0')}`
+            }
+            // If already YYYY-MM-DD, leave as is
+          }
         }
 
         row.is_member = true

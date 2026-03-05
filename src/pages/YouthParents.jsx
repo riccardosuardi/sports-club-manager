@@ -17,19 +17,24 @@ export default function YouthParents() {
 
   async function fetchData() {
     setLoading(true)
-    const { data: allMembers } = await supabase
-      .from('users')
-      .select('id, first_name, last_name, email, phone, member_type, is_minor, parent_id, preferred_contact_method')
-      .eq('is_member', true)
-      .order('last_name')
+    try {
+      const { data: allMembers } = await supabase
+        .from('users')
+        .select('id, first_name, last_name, email, phone, member_type, is_minor, parent_id, preferred_contact_method')
+        .eq('is_member', true)
+        .order('last_name')
 
-    const members = allMembers || []
-    const minorsList = members.filter(m => m.is_minor)
-    setMinors(minorsList)
+      const members = allMembers || []
+      const minorsList = members.filter(m => m.is_minor)
+      setMinors(minorsList)
 
-    const parentIds = new Set(minorsList.filter(m => m.parent_id).map(m => m.parent_id))
-    setParents(members.filter(m => parentIds.has(m.id) || m.member_type === 'genitore'))
-    setLoading(false)
+      const parentIds = new Set(minorsList.filter(m => m.parent_id).map(m => m.parent_id))
+      setParents(members.filter(m => parentIds.has(m.id) || m.member_type === 'genitore'))
+    } catch (err) {
+      console.error('YouthParents fetch error:', err)
+    } finally {
+      setLoading(false)
+    }
   }
 
   function getMinorChildren(parentId) {

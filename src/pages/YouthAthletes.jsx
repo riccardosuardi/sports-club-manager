@@ -17,14 +17,19 @@ export default function YouthAthletes() {
 
   async function fetchData() {
     setLoading(true)
-    const { data } = await supabase
-      .from('users')
-      .select('*, parent:parent_id(id, first_name, last_name)')
-      .eq('is_member', true)
-      .eq('is_minor', true)
-      .order('last_name')
-    setMinors(data || [])
-    setLoading(false)
+    try {
+      const { data } = await supabase
+        .from('users')
+        .select('*, parent:parent_id(id, first_name, last_name)')
+        .eq('is_member', true)
+        .eq('is_minor', true)
+        .order('last_name')
+      setMinors(data || [])
+    } catch (err) {
+      console.error('YouthAthletes fetch error:', err)
+    } finally {
+      setLoading(false)
+    }
   }
 
   const filtered = minors.filter(m =>
