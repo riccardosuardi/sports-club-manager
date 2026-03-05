@@ -90,6 +90,7 @@ export default function Marketing() {
   const [convertTarget, setConvertTarget] = useState(null)
   const [viewMode, setViewMode] = useState('list') // 'list' | 'board'
   const [listFilter, setListFilter] = useState('tutti') // 'tutti' | 'giovani' | 'genitori'
+  const [groupChildren, setGroupChildren] = useState(true)
   const [boardGroupBy, setBoardGroupBy] = useState('athlete') // 'athlete' | 'parent'
   const [showImportModal, setShowImportModal] = useState(false)
   const [draggedContact, setDraggedContact] = useState(null)
@@ -388,6 +389,20 @@ export default function Marketing() {
               </button>
             ))}
           </div>
+          {listFilter === 'genitori' && (
+            <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-600">
+              <button
+                type="button"
+                role="switch"
+                aria-checked={groupChildren}
+                onClick={() => setGroupChildren(!groupChildren)}
+                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${groupChildren ? 'bg-primary-600' : 'bg-gray-200'}`}
+              >
+                <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${groupChildren ? 'translate-x-4' : 'translate-x-0'}`} />
+              </button>
+              Raggruppa figli
+            </label>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <div className="flex rounded-lg border border-gray-200 p-0.5">
@@ -494,8 +509,8 @@ export default function Marketing() {
             )
           })}
         </div>
-      ) : listFilter === 'genitori' ? (
-        /* ===== PARENTS VIEW (filtered as list) ===== */
+      ) : listFilter === 'genitori' && groupChildren ? (
+        /* ===== PARENTS VIEW (grouped) ===== */
         <ParentsView
           contacts={filtered}
           parentGroups={getParentGroups()}
