@@ -40,7 +40,7 @@ export default function Dashboard() {
         supabase.from('users').select('id, status, is_minor, medical_certificate_expiry').eq('is_member', true),
         supabase.from('users').select('id, first_name, last_name, email, status, created_at').eq('is_member', true).order('created_at', { ascending: false }).limit(5),
         supabase.from('users').select('id, first_name, last_name, medical_certificate_expiry').eq('is_member', true).not('medical_certificate_expiry', 'is', null).lte('medical_certificate_expiry', new Date(today.getTime() + 30 * 86400000).toISOString().split('T')[0]).order('medical_certificate_expiry').limit(10),
-        supabase.from('users').select('id, first_name, last_name, date_of_birth').eq('is_member', true).like('date_of_birth', `%-${todayMonth}-${todayDay}`),
+        supabase.from('users').select('id, first_name, last_name, date_of_birth').eq('is_member', true).not('date_of_birth', 'is', null),
         supabase.from('courses').select('id, is_active'),
         supabase.from('enrollments').select('id, status'),
         supabase.from('users').select('id, contact_status').eq('is_member', false),
@@ -73,7 +73,12 @@ export default function Dashboard() {
           .slice(0, 5)
       )
 
-      setTodayBirthdays(birthdayRes.data || [])
+      const allWithDob = birthdayRes.data || []
+      setTodayBirthdays(allWithDob.filter(m => {
+        if (!m.date_of_birth) return false
+        const [, mm, dd] = m.date_of_birth.split('-')
+        return mm === todayMonth && dd === todayDay
+      }))
       setPendingOrders(ordersRes.data || [])
       setUpcomingCompetitions(competitionsRes.data || [])
     } catch (err) {
