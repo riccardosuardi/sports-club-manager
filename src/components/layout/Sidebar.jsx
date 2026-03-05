@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard,
@@ -72,6 +72,20 @@ export default function Sidebar({ open, onClose, collapsed, onToggleCollapse }) 
     })
     return initial
   })
+
+  // Auto-close groups that are not active when route changes
+  useEffect(() => {
+    setExpanded((prev) => {
+      const next = {}
+      navigation.forEach((item) => {
+        if (item.children) {
+          const isActive = item.children.some((c) => location.pathname.startsWith(c.to))
+          next[item.name] = isActive
+        }
+      })
+      return next
+    })
+  }, [location.pathname])
 
   function toggleGroup(name) {
     setExpanded((prev) => ({ ...prev, [name]: !prev[name] }))
@@ -188,7 +202,7 @@ export default function Sidebar({ open, onClose, collapsed, onToggleCollapse }) 
                 className={linkClasses}
                 onClick={onClose}
                 end={item.to === '/'}
-                title={collapsed ? item.name : undefined}
+                title={item.name}
               >
                 <item.icon size={20} />
                 {!collapsed && item.name}
