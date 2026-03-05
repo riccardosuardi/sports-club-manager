@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { Plus, Megaphone, UserPlus, Phone, Mail, LayoutList, Columns3, Upload, Download, FileDown, CheckCircle2, AlertCircle, Users, Eye, Pencil, Trash2, MessageCircle, ChevronDown, ChevronRight, GripVertical, Search, X, Link } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { formatDate, formatDateTime, getFullName } from '../lib/utils'
+import { formatDate, formatDateTime, getFullName, calculateAge } from '../lib/utils'
 import Badge from '../components/ui/Badge'
 import SearchInput from '../components/ui/SearchInput'
 import EmptyState from '../components/ui/EmptyState'
@@ -105,7 +105,7 @@ export default function Marketing() {
     try {
       const { data, error } = await supabase
         .from('users')
-        .select('id, first_name, last_name, email, phone, source, interest, contact_status, notes, last_contacted_at, created_at, parent_id, preferred_contact_method, member_type, parent:parent_id(id, first_name, last_name, email, phone, preferred_contact_method)')
+        .select('id, first_name, last_name, email, phone, source, interest, contact_status, notes, last_contacted_at, created_at, parent_id, preferred_contact_method, member_type, date_of_birth, parent:parent_id(id, first_name, last_name, email, phone, preferred_contact_method)')
         .eq('is_member', false)
         .order('created_at', { ascending: false })
       if (error) console.error('Marketing query error:', error)
@@ -471,7 +471,12 @@ export default function Marketing() {
               {filtered.map((contact) => (
                 <tr key={contact.id} className="hover:bg-gray-50">
                   <td className="whitespace-nowrap px-4 py-3">
-                    <p className="font-medium text-gray-900">{contact.first_name} {contact.last_name}</p>
+                    <p className="font-medium text-gray-900">
+                      {contact.first_name} {contact.last_name}
+                      {contact.date_of_birth && (
+                        <span className="ml-1.5 text-xs font-normal text-gray-400">{calculateAge(contact.date_of_birth)} anni</span>
+                      )}
+                    </p>
                     <p className="text-xs text-gray-500">{formatDate(contact.created_at)}</p>
                   </td>
                   <td className="hidden whitespace-nowrap px-4 py-3 md:table-cell">
