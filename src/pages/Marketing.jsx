@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import ReactDOM from 'react-dom'
-import { Plus, Megaphone, UserPlus, Phone, Mail, LayoutList, Columns3, Upload, Download, FileDown, CheckCircle2, AlertCircle, Users, Eye, Pencil, Trash2, MessageCircle, ChevronDown, ChevronRight, ChevronUp, GripVertical, Search, X, Link, CheckSquare } from 'lucide-react'
+import { Plus, Megaphone, UserCheck, Phone, Mail, LayoutList, Columns3, Upload, Download, FileDown, CheckCircle2, AlertCircle, Users, Eye, Pencil, Trash2, MessageCircle, ChevronDown, ChevronRight, ChevronUp, GripVertical, Search, X, Link, CheckSquare } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { formatDate, formatDateTime, getFullName, calculateAge } from '../lib/utils'
 import Badge from '../components/ui/Badge'
@@ -14,7 +14,6 @@ const IMPORT_CONTACT_COLUMNS = [
   { header: 'Nome', field: 'first_name' },
   { header: 'Email', field: 'email' },
   { header: 'Telefono', field: 'phone' },
-  { header: 'Fonte', field: 'source' },
   { header: 'Stato', field: 'contact_status' },
   { header: 'Note', field: 'notes' },
 ]
@@ -23,7 +22,6 @@ const MEMBER_TYPES = [
   { value: 'giovane', label: 'Giovane' },
   { value: 'adulto', label: 'Adulto' },
 ]
-const SOURCES = ['Sito web', 'Passaparola', 'Evento', 'Social', 'Volantino', 'Altro']
 const STATUSES = ['tutti', 'nuovo', 'contattato', 'interessato', 'convertito', 'perso']
 const PIPELINE_COLUMNS = [
   { key: 'nuovo', label: 'Nuovi', color: 'border-blue-400', bg: 'bg-blue-50', dot: 'bg-blue-500' },
@@ -120,7 +118,7 @@ export default function Marketing() {
     try {
       const { data, error } = await supabase
         .from('users')
-        .select('id, first_name, last_name, email, phone, source, contact_status, notes, last_contacted_at, created_at, parent_id, preferred_contact_method, member_type, date_of_birth, parent:parent_id(id, first_name, last_name, email, phone, preferred_contact_method)')
+        .select('id, first_name, last_name, email, phone, contact_status, notes, created_at, parent_id, preferred_contact_method, member_type, date_of_birth, parent:parent_id(id, first_name, last_name, email, phone, preferred_contact_method)')
         .eq('is_member', false)
         .order('created_at', { ascending: false })
       if (error) console.error('Marketing query error:', error)
@@ -130,128 +128,6 @@ export default function Marketing() {
     } finally {
       setLoading(false)
     }
-  }
-
-  async function handleBulkDataFix() {
-    const updates = [
-      ['Joachimowicz', 'Agata', null, 'adulto'],
-      ['Longatti', 'Letizia Agnieszka', '2016-01-10', 'giovane'],
-      ['Ermatova', 'Zirek', null, 'adulto'],
-      ['Ermatova', 'Khadizha', '2016-12-29', 'giovane'],
-      ['Mandaglio', 'Sonia', null, 'adulto'],
-      ['Busana', 'Paolo', '2015-01-05', 'giovane'],
-      ['Sortino', 'Mary', null, 'adulto'],
-      ['Albano', 'Emanuel', '2014-10-08', 'giovane'],
-      ['Turci', 'Edoardo', '2019-07-31', 'giovane'],
-      ['Trombello', 'Paolo', null, 'adulto'],
-      ['Trombello', 'Ines', '2017-12-06', 'giovane'],
-      ['Hanna', 'Grace', null, 'adulto'],
-      ['Cipollini', 'Nicole', '2016-01-23', 'giovane'],
-      ['Mytyanska', 'Lidiya', null, 'adulto'],
-      ['Marciano', 'Erik', '2016-12-07', 'giovane'],
-      ['Marciano', 'Elizabeth', '2019-04-27', 'giovane'],
-      ['De Marco', 'Sara', null, 'adulto'],
-      ['Ciafani', 'Irene', '2016-09-27', 'giovane'],
-      ['Zazzi', 'Valeria', null, 'adulto'],
-      ['Barbieri', 'Jacopo', '2016-06-16', 'giovane'],
-      ['Prudente', 'Inna', null, 'adulto'],
-      ['Prudente', 'Isabel', '2013-11-13', 'giovane'],
-      ['De Lucchi', 'Andrea', null, 'adulto'],
-      ['De Lucchi', 'Tommaso', '2016-12-07', 'giovane'],
-      ['De Lucchi', 'Giancarlo', '2021-02-11', 'giovane'],
-      ['Cangelosi', 'Marco', null, 'adulto'],
-      ['Cangelosi', 'Valerio', '2017-11-03', 'giovane'],
-      ['Cangelosi', 'Antonio', '2022-10-22', 'giovane'],
-      [null, 'Elena', null, 'adulto'],
-      ['Lo Piccolo', 'Tommaso M.', '2018-07-15', 'giovane'],
-      ['Venuto', 'Debora', null, 'adulto'],
-      ['Rinaudo', 'Giulia', null, 'giovane'],
-      [null, 'Jiane', null, 'adulto'],
-      ['Lee', 'Roa', '2017-09-10', 'giovane'],
-      ['Lee', 'Roon', '2020-03-18', 'giovane'],
-      ['Oregioni', 'Sara', null, 'adulto'],
-      ['Paggi', 'Alessia', '2016-04-20', 'giovane'],
-      ['Paggi', 'Beatrice', '2020-04-28', 'giovane'],
-      ['Urso', 'Rosa L.', null, 'adulto'],
-      ['Vassallo', 'Federico', '2019-12-06', 'giovane'],
-      ['Brambilla', 'Grazia', null, 'adulto'],
-      ['Cigardi', 'Riccardo', null, 'giovane'],
-      ['Marcotto', 'Pier', null, 'adulto'],
-      ['Marcotto', 'Bianca Sofia', '2020-02-21', 'giovane'],
-      ['Borzi', 'Viki', null, 'adulto'],
-      ['Borzi', 'Davide', null, 'giovane'],
-      ['Borzi', 'Lucia', null, 'giovane'],
-      ['Frigerio', 'Myriam', null, 'adulto'],
-      ['Lombardi', 'Alessio', '2016-03-30', 'giovane'],
-      ['Demian', 'Narcisa', null, 'adulto'],
-      ['Poli', 'Sebastian', '2020-10-06', 'giovane'],
-      [null, 'Loana', null, 'adulto'],
-      ['Figueira', 'Leo', '2017-02-06', 'giovane'],
-      ['Introzzi', 'Jacqueline', null, 'adulto'],
-      ['Peiti', 'Isabel', '2018-02-14', 'giovane'],
-      ['Peiti', 'Karen', '2020-08-19', 'giovane'],
-      ['Dudko', 'Tatiana', null, 'adulto'],
-      ['Bilen', 'Michail', '2014-01-06', 'giovane'],
-      ['Orza', 'Crina Bianca', null, 'adulto'],
-      ['Orza', 'Anda', '2016-05-16', 'giovane'],
-      ['Falzone', 'Carla', null, 'adulto'],
-      ['Manfroi Giancarlo', 'Giorgio', '2019-07-30', 'giovane'],
-      ['Serediuk', 'Taras', null, 'adulto'],
-      ['Serediuk', 'Ivan', '2010-05-20', 'giovane'],
-      ['Serediuk', 'Artem', '2019-10-16', 'giovane'],
-      ['Montagna', 'Marina', null, 'adulto'],
-      ['Ronchi', 'Laura', null, 'giovane'],
-      ['Ronchi', 'Rachele', null, 'giovane'],
-      ['Zaffaroni', 'Maurizio', null, 'adulto'],
-      ['Graziani', 'Vera', '2019-02-21', 'giovane'],
-      ['Boffi', 'Luca', null, 'adulto'],
-      ['Boffi', 'Lucia', null, 'giovane'],
-      ['Boffi', 'Paolo', null, 'giovane'],
-      ['Stella', 'Cristian', null, 'adulto'],
-      ['Stella', 'William', null, 'giovane'],
-      ['Stella', 'Francesco', null, 'giovane'],
-      ['Stella', 'Leonardo', null, 'giovane'],
-      ['Kurzlechner', 'Sandra', null, 'adulto'],
-      ['Kurzlechner', 'Alizee', '2015-10-14', 'giovane'],
-      ['Kurzlechner', 'Alexa', '2018-03-10', 'giovane'],
-      ['Kurzlechner', 'Alenie', '2020-10-20', 'giovane'],
-      ['Pozzi', 'Valentina', null, 'adulto'],
-      ['Roda', 'Alessandro', '2019-12-23', 'giovane'],
-      ['Valtolina', 'Erika', null, 'adulto'],
-      ['Fedrici', 'Caecilia', '2019-10-14', 'giovane'],
-    ]
-
-    let updated = 0, notFound = 0, errors = 0
-    const notFoundList = []
-
-    for (const [lastName, firstName, dob, memberType] of updates) {
-      const match = contacts.find(c => {
-        const fnMatch = (c.first_name || '').toLowerCase().trim() === (firstName || '').toLowerCase().trim()
-        const lnMatch = (c.last_name || '').toLowerCase().trim() === (lastName || '').toLowerCase().trim()
-        return fnMatch && lnMatch
-      })
-
-      if (!match) {
-        notFoundList.push(`${firstName} ${lastName}`)
-        notFound++
-        continue
-      }
-
-      const payload = { member_type: memberType }
-      if (dob) payload.date_of_birth = dob
-
-      const { error } = await supabase.from('users').update(payload).eq('id', match.id)
-      if (error) {
-        console.error(`Error: ${firstName} ${lastName}:`, error.message)
-        errors++
-      } else {
-        updated++
-      }
-    }
-
-    if (notFoundList.length > 0) console.log('Not found:', notFoundList)
-    alert(`Aggiornamento completato!\n${updated} aggiornati\n${notFound} non trovati\n${errors} errori${notFoundList.length > 0 ? '\n\nNon trovati: ' + notFoundList.join(', ') : ''}`)
-    fetchContacts()
   }
 
   async function handleDelete(id) {
@@ -272,7 +148,7 @@ export default function Marketing() {
   }
 
   async function handleStatusChange(contactId, newStatus) {
-    await supabase.from('users').update({ contact_status: newStatus, last_contacted_at: new Date().toISOString() }).eq('id', contactId)
+    await supabase.from('users').update({ contact_status: newStatus }).eq('id', contactId)
     setContacts(prev => prev.map(c => c.id === contactId ? { ...c, contact_status: newStatus } : c))
   }
 
@@ -467,13 +343,6 @@ export default function Marketing() {
           </p>
         </div>
         <div className="flex gap-2">
-          <button
-            onClick={handleBulkDataFix}
-            className="inline-flex items-center gap-2 rounded-lg border border-orange-300 bg-orange-50 px-3 py-2 text-sm font-medium text-orange-700 hover:bg-orange-100"
-            title="Aggiorna tipologia e data nascita da lista"
-          >
-            <CheckCircle2 size={16} /> Fix Dati
-          </button>
           <button
             onClick={handleExport}
             className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
@@ -731,13 +600,10 @@ export default function Marketing() {
                   <span className="inline-flex items-center gap-1">Contatti {sortBy === 'contacts' && (sortDir === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />)}</span>
                 </th>
                 <th className="hidden px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 lg:table-cell">Genitore</th>
-                <th className="hidden px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 lg:table-cell">Fonte</th>
-                <th className="hidden px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 lg:table-cell">Interesse</th>
                 <th className="hidden px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 lg:table-cell cursor-pointer select-none hover:text-gray-700" onClick={() => handleSort('type')}>
                   <span className="inline-flex items-center gap-1">Tipologia {sortBy === 'type' && (sortDir === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />)}</span>
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Stato</th>
-                <th className="hidden px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 md:table-cell">Ultimo contatto</th>
                 <th className="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500">Azioni</th>
               </tr>
             </thead>
@@ -776,16 +642,6 @@ export default function Marketing() {
                   </td>
                   <td className="hidden whitespace-nowrap px-4 py-3 text-sm lg:table-cell">
                     <select
-                      value={contact.source || ''}
-                      onChange={(e) => handleInlineUpdate(contact.id, 'source', e.target.value)}
-                      className="rounded border border-gray-300 px-2 py-1 text-xs"
-                    >
-                      <option value="">-</option>
-                      {SOURCES.map(s => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                  </td>
-                  <td className="hidden whitespace-nowrap px-4 py-3 text-sm lg:table-cell">
-                    <select
                       value={contact.member_type || ''}
                       onChange={(e) => handleInlineUpdate(contact.id, 'member_type', e.target.value)}
                       className="rounded border border-gray-300 px-2 py-1 text-xs"
@@ -807,15 +663,12 @@ export default function Marketing() {
                       <option value="perso">Perso</option>
                     </select>
                   </td>
-                  <td className="hidden whitespace-nowrap px-4 py-3 text-sm text-gray-500 md:table-cell">
-                    {contact.last_contacted_at ? formatDateTime(contact.last_contacted_at) : '-'}
-                  </td>
                   <td className="whitespace-nowrap px-4 py-3 text-right">
                     <div className="flex justify-end gap-1">
                       <ContactButton contact={contact} />
                       {contact.contact_status !== 'convertito' && (
-                        <button onClick={() => setConvertTarget(contact)} className="rounded-lg p-1.5 text-green-600 hover:bg-green-50" title="Converti a atleta">
-                          <UserPlus size={16} />
+                        <button onClick={() => setConvertTarget(contact)} className="inline-flex items-center gap-1 rounded-lg border border-green-200 bg-green-50 px-2 py-1 text-xs font-medium text-green-700 hover:bg-green-100" title="Converti in atleta">
+                          <UserCheck size={14} /> Atleta
                         </button>
                       )}
                       <button onClick={() => { setEditing(contact); setShowForm(true) }} className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100" title="Modifica">
@@ -942,8 +795,8 @@ function KanbanCard({ contact, onEdit, onDelete, onConvert, onDragStart, onDragE
         </select>
         <div className="flex gap-1">
           {contact.contact_status !== 'convertito' && (
-            <button onClick={onConvert} className="rounded-lg p-1 text-green-600 hover:bg-green-50" title="Converti">
-              <UserPlus size={14} />
+            <button onClick={onConvert} className="inline-flex items-center gap-1 rounded border border-green-200 bg-green-50 px-1.5 py-0.5 text-xs font-medium text-green-700 hover:bg-green-100" title="Converti in atleta">
+              <UserCheck size={12} /> Atleta
             </button>
           )}
           <button onClick={onEdit} className="rounded-lg p-1 text-gray-500 hover:bg-gray-100" title="Modifica">
@@ -1101,8 +954,8 @@ function ParentChildRow({ contact, onEdit, onDelete, onConvert, onStatusChange }
         <div className="flex gap-1">
           <ContactButton contact={contact} />
           {contact.contact_status !== 'convertito' && (
-            <button onClick={() => onConvert(contact)} className="rounded-lg p-1.5 text-green-600 hover:bg-green-50" title="Converti">
-              <UserPlus size={16} />
+            <button onClick={() => onConvert(contact)} className="inline-flex items-center gap-1 rounded-lg border border-green-200 bg-green-50 px-2 py-1 text-xs font-medium text-green-700 hover:bg-green-100" title="Converti in atleta">
+              <UserCheck size={14} /> Atleta
             </button>
           )}
           <button onClick={() => onEdit(contact)} className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100" title="Modifica">
@@ -1254,7 +1107,6 @@ function ContactForm({ contact, contacts = [], onSaved, onCancel }) {
     last_name: contact?.last_name || '',
     email: contact?.email || '',
     phone: contact?.phone || '',
-    source: contact?.source || '',
     contact_status: contact?.contact_status || 'nuovo',
     notes: contact?.notes || '',
     parent_id: contact?.parent_id || '',
@@ -1329,13 +1181,6 @@ function ContactForm({ contact, contacts = [], onSaved, onCancel }) {
           <select value={form.parent_id || ''} onChange={(e) => set('parent_id', e.target.value)} className={inputClass}>
             <option value="">-- Nessuno --</option>
             {parentOptions.map(p => <option key={p.id} value={p.id}>{p.last_name} {p.first_name}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Fonte</label>
-          <select value={form.source || ''} onChange={(e) => set('source', e.target.value)} className={inputClass}>
-            <option value="">--</option>
-            {SOURCES.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
         <div>
@@ -1417,7 +1262,6 @@ function ImportContattiModal({ onDone, onCancel }) {
       colMap['cognome'] = 'last_name'
       colMap['nome'] = 'first_name'
       colMap['telefono'] = 'phone'
-      colMap['fonte'] = 'source'
       colMap['stato'] = 'contact_status'
       colMap['note'] = 'notes'
 
@@ -1577,8 +1421,6 @@ function EmailCompose({ contacts, onClose }) {
     if (recipients.length === 0) return
     const mailto = `mailto:?bcc=${encodeURIComponent(recipients.join(','))}&subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
     window.open(mailto)
-    const ids = contacts.filter(c => selected.has(c.id)).map(c => c.id)
-    supabase.from('users').update({ last_contacted_at: new Date().toISOString() }).in('id', ids).then(() => {})
     onClose()
   }
 
