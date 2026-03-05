@@ -27,17 +27,22 @@ export default function Clothing() {
 
   async function fetchData() {
     setLoading(true)
-    const [itemsRes, inventoryRes, assignmentsRes, membersRes] = await Promise.all([
-      supabase.from('clothing_items').select('*').order('name'),
-      supabase.from('clothing_inventory').select('*'),
-      supabase.from('clothing_assignments').select('*, member:member_id(first_name, last_name), item:item_id(name, category)').order('assigned_at', { ascending: false }),
-      supabase.from('users').select('id, first_name, last_name').eq('is_member', true).eq('status', 'attivo').order('last_name'),
-    ])
-    setItems(itemsRes.data || [])
-    setInventory(inventoryRes.data || [])
-    setAssignments(assignmentsRes.data || [])
-    setMembers(membersRes.data || [])
-    setLoading(false)
+    try {
+      const [itemsRes, inventoryRes, assignmentsRes, membersRes] = await Promise.all([
+        supabase.from('clothing_items').select('*').order('name'),
+        supabase.from('clothing_inventory').select('*'),
+        supabase.from('clothing_assignments').select('*, member:member_id(first_name, last_name), item:item_id(name, category)').order('assigned_at', { ascending: false }),
+        supabase.from('users').select('id, first_name, last_name').eq('is_member', true).eq('status', 'attivo').order('last_name'),
+      ])
+      setItems(itemsRes.data || [])
+      setInventory(inventoryRes.data || [])
+      setAssignments(assignmentsRes.data || [])
+      setMembers(membersRes.data || [])
+    } catch (err) {
+      console.error('Clothing fetch error:', err)
+    } finally {
+      setLoading(false)
+    }
   }
 
   async function handleDeleteItem(id) {

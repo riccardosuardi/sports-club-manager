@@ -21,13 +21,18 @@ export default function YouthCourses() {
 
   async function fetchData() {
     setLoading(true)
-    const [coursesRes, enrollRes] = await Promise.all([
-      supabase.from('courses').select('*').eq('is_youth', true).order('name'),
-      supabase.from('enrollments').select('id, course_id, status').eq('status', 'attivo'),
-    ])
-    setCourses(coursesRes.data || [])
-    setEnrollments(enrollRes.data || [])
-    setLoading(false)
+    try {
+      const [coursesRes, enrollRes] = await Promise.all([
+        supabase.from('courses').select('*').eq('is_youth', true).order('name'),
+        supabase.from('enrollments').select('id, course_id, status').eq('status', 'attivo'),
+      ])
+      setCourses(coursesRes.data || [])
+      setEnrollments(enrollRes.data || [])
+    } catch (err) {
+      console.error('YouthCourses fetch error:', err)
+    } finally {
+      setLoading(false)
+    }
   }
 
   function getEnrollmentCount(courseId) {

@@ -23,17 +23,22 @@ export default function MemberDetail() {
 
   async function fetchData() {
     setLoading(true)
-    const [memberRes, childrenRes, enrollRes, allRes] = await Promise.all([
-      supabase.from('users').select('*, parent:parent_id(id, first_name, last_name)').eq('id', id).single(),
-      supabase.from('users').select('id, first_name, last_name, date_of_birth, status').eq('parent_id', id),
-      supabase.from('enrollments').select('*, course:course_id(name, sport, schedule)').eq('member_id', id),
-      supabase.from('users').select('id, first_name, last_name, is_minor').eq('is_member', true),
-    ])
-    if (memberRes.data) setMember(memberRes.data)
-    setChildren(childrenRes.data || [])
-    setEnrollments(enrollRes.data || [])
-    setAllMembers(allRes.data || [])
-    setLoading(false)
+    try {
+      const [memberRes, childrenRes, enrollRes, allRes] = await Promise.all([
+        supabase.from('users').select('*, parent:parent_id(id, first_name, last_name)').eq('id', id).maybeSingle(),
+        supabase.from('users').select('id, first_name, last_name, date_of_birth, status').eq('parent_id', id),
+        supabase.from('enrollments').select('*, course:course_id(name, sport, schedule)').eq('member_id', id),
+        supabase.from('users').select('id, first_name, last_name, is_minor').eq('is_member', true),
+      ])
+      if (memberRes.data) setMember(memberRes.data)
+      setChildren(childrenRes.data || [])
+      setEnrollments(enrollRes.data || [])
+      setAllMembers(allRes.data || [])
+    } catch (err) {
+      console.error('MemberDetail fetch error:', err)
+    } finally {
+      setLoading(false)
+    }
   }
 
   if (loading) return <div className="py-12 text-center text-gray-500">Caricamento...</div>
