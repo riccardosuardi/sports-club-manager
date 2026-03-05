@@ -906,7 +906,7 @@ function ParentCell({ contact, contacts, onAssign }) {
           </button>
         )}
       </div>
-      <div className="absolute left-0 top-full z-20 mt-1 max-h-48 w-64 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+      <div className="absolute left-0 bottom-full z-20 mb-1 max-h-48 w-64 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
         {filtered.length === 0 ? (
           <p className="px-3 py-2 text-xs text-gray-400">Nessun risultato</p>
         ) : (
