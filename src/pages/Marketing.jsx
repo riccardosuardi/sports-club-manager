@@ -88,14 +88,13 @@ export default function Marketing() {
   const [editing, setEditing] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [convertTarget, setConvertTarget] = useState(null)
-  const [showEmail, setShowEmail] = useState(false)
-  const [viewMode, setViewMode] = useState('list') // 'list' | 'parents' | 'board'
+  const [viewMode, setViewMode] = useState('list') // 'list' | 'board'
+  const [listFilter, setListFilter] = useState('tutti') // 'tutti' | 'giovani' | 'genitori'
   const [boardGroupBy, setBoardGroupBy] = useState('athlete') // 'athlete' | 'parent'
   const [showImportModal, setShowImportModal] = useState(false)
   const [draggedContact, setDraggedContact] = useState(null)
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false)
-  const [filterTypes, setFilterTypes] = useState(new Set()) // empty = show all
   const [sortBy, setSortBy] = useState(null) // 'name' | 'contacts' | 'type'
   const [sortDir, setSortDir] = useState('asc')
   const searchInputRef = useRef(null)
@@ -253,8 +252,10 @@ export default function Marketing() {
       `${c.first_name} ${c.last_name}`.toLowerCase().includes(search.toLowerCase()) ||
       (c.email || '').toLowerCase().includes(search.toLowerCase()) ||
       (c.parent ? `${c.parent.first_name} ${c.parent.last_name}`.toLowerCase().includes(search.toLowerCase()) : false)
-    const matchesType = filterTypes.size === 0 || filterTypes.has(c.member_type || '')
-    return matchesSearch && matchesType
+    const matchesFilter = listFilter === 'tutti' ||
+      (listFilter === 'giovani' && c.member_type === 'giovane') ||
+      (listFilter === 'genitori' && c.member_type === 'adulto')
+    return matchesSearch && matchesFilter
   }).sort((a, b) => {
     if (!sortBy) return 0
     const dir = sortDir === 'asc' ? 1 : -1
@@ -356,12 +357,6 @@ export default function Marketing() {
             <Upload size={16} /> Importa CSV
           </button>
           <button
-            onClick={() => setShowEmail(true)}
-            className="inline-flex items-center gap-2 rounded-lg border border-primary-600 px-4 py-2.5 text-sm font-medium text-primary-600 hover:bg-primary-50"
-          >
-            <Mail size={18} /> Invia Email
-          </button>
-          <button
             onClick={() => { setEditing(null); setShowForm(true) }}
             className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-700"
           >
@@ -376,43 +371,25 @@ export default function Marketing() {
           <div className="sm:w-80">
             <SearchInput ref={searchInputRef} value={search} onChange={setSearch} placeholder="Cerca contatti..." />
           </div>
-          {viewMode === 'list' && (
-            <div className="flex items-center gap-3">
-              <span className="text-xs text-gray-500">Tipologia:</span>
-              {[...MEMBER_TYPES, { value: '', label: 'Non assegnata' }].map((t) => (
-                <label key={t.value} className="flex items-center gap-1.5 cursor-pointer text-sm">
-                  <input
-                    type="checkbox"
-                    checked={filterTypes.has(t.value)}
-                    onChange={() => {
-                      setFilterTypes(prev => {
-                        const next = new Set(prev)
-                        if (next.has(t.value)) next.delete(t.value)
-                        else next.add(t.value)
-                        return next
-                      })
-                    }}
-                    className="h-3.5 w-3.5 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                  />
-                  <span className={filterTypes.has(t.value) ? 'font-medium text-gray-900' : 'text-gray-500'}>
-                    {t.label}
-                  </span>
-                </label>
-              ))}
-            </div>
-          )}
+          <div className="flex rounded-lg border border-gray-200 p-0.5">
+            {[
+              { value: 'tutti', label: 'Tutti' },
+              { value: 'giovani', label: 'Giovani' },
+              { value: 'genitori', label: 'Genitori' },
+            ].map((f) => (
+              <button
+                key={f.value}
+                onClick={() => setListFilter(f.value)}
+                className={`rounded-md px-3 py-1.5 text-sm font-medium ${
+                  listFilter === f.value ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
         </div>
         <div className="flex items-center gap-2">
-          {viewMode === 'board' && (
-            <select
-              value={boardGroupBy}
-              onChange={(e) => setBoardGroupBy(e.target.value)}
-              className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600"
-            >
-              <option value="athlete">Per Atleta</option>
-              <option value="parent">Per Genitore</option>
-            </select>
-          )}
           <div className="flex rounded-lg border border-gray-200 p-0.5">
             <button
               onClick={() => setViewMode('list')}
@@ -421,14 +398,6 @@ export default function Marketing() {
               }`}
             >
               <LayoutList size={16} /> Lista
-            </button>
-            <button
-              onClick={() => setViewMode('parents')}
-              className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium ${
-                viewMode === 'parents' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              <Users size={16} /> Genitori
             </button>
             <button
               onClick={() => setViewMode('board')}
@@ -448,12 +417,7 @@ export default function Marketing() {
         /* ===== KANBAN BOARD ===== */
         <div className="flex gap-4 overflow-x-auto pb-4">
           {PIPELINE_COLUMNS.map((col) => {
-            const colContacts = contacts.filter((c) => {
-              const matchesSearch = !search ||
-                `${c.first_name} ${c.last_name}`.toLowerCase().includes(search.toLowerCase()) ||
-                (c.email || '').toLowerCase().includes(search.toLowerCase())
-              return c.contact_status === col.key && matchesSearch
-            })
+            const colContacts = filtered.filter((c) => c.contact_status === col.key)
 
             return (
               <div
@@ -530,8 +494,8 @@ export default function Marketing() {
             )
           })}
         </div>
-      ) : viewMode === 'parents' ? (
-        /* ===== PARENTS VIEW ===== */
+      ) : listFilter === 'genitori' ? (
+        /* ===== PARENTS VIEW (filtered as list) ===== */
         <ParentsView
           contacts={filtered}
           parentGroups={getParentGroups()}
@@ -697,9 +661,6 @@ export default function Marketing() {
         variant="danger"
       />
 
-      <Modal open={showEmail} onClose={() => setShowEmail(false)} title="Invia Comunicazione Email" size="lg">
-        <EmailCompose contacts={filtered.filter(c => c.email)} onClose={() => setShowEmail(false)} />
-      </Modal>
 
       <Modal open={showImportModal} onClose={() => setShowImportModal(false)} title="Importa Contatti da CSV" size="lg">
         <ImportContattiModal
@@ -1394,100 +1355,3 @@ function ImportContattiModal({ onDone, onCancel }) {
   )
 }
 
-function EmailCompose({ contacts, onClose }) {
-  const [selected, setSelected] = useState(new Set(contacts.map(c => c.id)))
-  const [subject, setSubject] = useState('')
-  const [body, setBody] = useState('')
-
-  function toggleContact(id) {
-    setSelected(prev => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
-
-  function toggleAll() {
-    if (selected.size === contacts.length) {
-      setSelected(new Set())
-    } else {
-      setSelected(new Set(contacts.map(c => c.id)))
-    }
-  }
-
-  function handleSend() {
-    const recipients = contacts.filter(c => selected.has(c.id)).map(c => c.email).filter(Boolean)
-    if (recipients.length === 0) return
-    const mailto = `mailto:?bcc=${encodeURIComponent(recipients.join(','))}&subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
-    window.open(mailto)
-    onClose()
-  }
-
-  const inputClass = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500 focus:outline-none'
-
-  return (
-    <div className="space-y-4">
-      <div>
-        <div className="mb-1 flex items-center justify-between">
-          <label className="block text-sm font-medium text-gray-700">
-            Destinatari ({contacts.filter(c => selected.has(c.id)).length} selezionati)
-          </label>
-          <button onClick={toggleAll} className="text-xs text-primary-600 hover:text-primary-700">
-            {selected.size === contacts.length ? 'Deseleziona tutti' : 'Seleziona tutti'}
-          </button>
-        </div>
-        <div className="max-h-40 overflow-y-auto rounded-lg border border-gray-200 p-2">
-          {contacts.length === 0 ? (
-            <p className="text-sm text-gray-500 py-2 text-center">Nessun contatto con email</p>
-          ) : (
-            contacts.map(c => (
-              <label key={c.id} className="flex items-center gap-2 rounded px-2 py-1.5 hover:bg-gray-50 text-sm cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={selected.has(c.id)}
-                  onChange={() => toggleContact(c.id)}
-                  className="rounded border-gray-300 text-primary-600"
-                />
-                <span className="font-medium">{c.first_name} {c.last_name}</span>
-                <span className="text-gray-400">({c.email})</span>
-              </label>
-            ))
-          )}
-        </div>
-      </div>
-      <div>
-        <label className="mb-1 block text-sm font-medium text-gray-700">Oggetto</label>
-        <input
-          type="text"
-          value={subject}
-          onChange={(e) => setSubject(e.target.value)}
-          placeholder="Oggetto della comunicazione..."
-          className={inputClass}
-        />
-      </div>
-      <div>
-        <label className="mb-1 block text-sm font-medium text-gray-700">Messaggio</label>
-        <textarea
-          value={body}
-          onChange={(e) => setBody(e.target.value)}
-          rows={6}
-          placeholder="Scrivi il messaggio..."
-          className={inputClass}
-        />
-      </div>
-      <div className="flex justify-end gap-3 border-t pt-4">
-        <button onClick={onClose} className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
-          Annulla
-        </button>
-        <button
-          onClick={handleSend}
-          disabled={selected.size === 0 || !subject}
-          className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50"
-        >
-          Apri nel client email
-        </button>
-      </div>
-    </div>
-  )
-}
