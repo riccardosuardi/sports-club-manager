@@ -37,6 +37,62 @@ const CONTACT_METHODS = [
   { value: 'phone', label: 'Telefono', icon: Phone },
 ]
 
+const TYPE_CHIPS = [
+  { value: '', label: '-', cls: 'bg-gray-100 text-gray-500' },
+  { value: 'giovane', label: 'Giovane', cls: 'bg-blue-100 text-blue-700' },
+  { value: 'adulto', label: 'Adulto', cls: 'bg-green-100 text-green-700' },
+]
+
+const STATUS_CHIPS = [
+  { value: 'nuovo', label: 'Nuovo', cls: 'bg-blue-50 text-blue-700 ring-blue-200' },
+  { value: 'contattato', label: 'Contattato', cls: 'bg-purple-50 text-purple-700 ring-purple-200' },
+  { value: 'interessato', label: 'Interessato', cls: 'bg-orange-50 text-orange-700 ring-orange-200' },
+  { value: 'convertito', label: 'Convertito', cls: 'bg-green-50 text-green-700 ring-green-200' },
+  { value: 'perso', label: 'Perso', cls: 'bg-red-50 text-red-700 ring-red-200' },
+]
+
+function TypeChip({ value, onChange }) {
+  const idx = TYPE_CHIPS.findIndex(t => t.value === (value || ''))
+  const chip = TYPE_CHIPS[idx >= 0 ? idx : 0]
+  function cycle() {
+    const next = TYPE_CHIPS[(idx + 1) % TYPE_CHIPS.length]
+    onChange(next.value)
+  }
+  return (
+    <button onClick={cycle} className={`rounded-full px-2.5 py-1 text-xs font-medium cursor-pointer ${chip.cls}`} title="Clicca per cambiare">
+      {chip.label}
+    </button>
+  )
+}
+
+function StatusChip({ value, onChange }) {
+  const [open, setOpen] = useState(false)
+  const chip = STATUS_CHIPS.find(s => s.value === value) || STATUS_CHIPS[0]
+  return (
+    <div className="relative">
+      <button onClick={() => setOpen(!open)} className={`rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset cursor-pointer ${chip.cls}`}>
+        {chip.label}
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute left-0 top-full z-20 mt-1 flex flex-col gap-1 rounded-lg border border-gray-200 bg-white p-1.5 shadow-lg">
+            {STATUS_CHIPS.map(s => (
+              <button
+                key={s.value}
+                onClick={() => { onChange(s.value); setOpen(false) }}
+                className={`rounded-full px-2.5 py-1 text-xs font-medium text-left whitespace-nowrap ring-1 ring-inset ${s.cls} ${s.value === value ? 'ring-2' : ''}`}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 function ContactButton({ contact, size = 14 }) {
   const method = contact.preferred_contact_method
   const phone = (contact.phone || '').replace(/\s+/g, '')
@@ -626,27 +682,10 @@ export default function Marketing() {
                     />
                   </td>
                   <td className="hidden whitespace-nowrap px-4 py-3 text-sm lg:table-cell">
-                    <select
-                      value={contact.member_type || ''}
-                      onChange={(e) => handleInlineUpdate(contact.id, 'member_type', e.target.value)}
-                      className="rounded border border-gray-300 px-2 py-1 text-xs"
-                    >
-                      <option value="">-</option>
-                      {MEMBER_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-                    </select>
+                    <TypeChip value={contact.member_type} onChange={(v) => handleInlineUpdate(contact.id, 'member_type', v)} />
                   </td>
                   <td className="whitespace-nowrap px-4 py-3">
-                    <select
-                      value={contact.contact_status}
-                      onChange={(e) => handleStatusChange(contact.id, e.target.value)}
-                      className="rounded border border-gray-300 px-2 py-1 text-xs"
-                    >
-                      <option value="nuovo">Nuovo</option>
-                      <option value="contattato">Contattato</option>
-                      <option value="interessato">Interessato</option>
-                      <option value="convertito">Convertito</option>
-                      <option value="perso">Perso</option>
-                    </select>
+                    <StatusChip value={contact.contact_status} onChange={(v) => handleStatusChange(contact.id, v)} />
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-right">
                     <div className="flex justify-end gap-1">
