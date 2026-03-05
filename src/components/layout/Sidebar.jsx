@@ -55,6 +55,46 @@ const navigation = [
   },
 ]
 
+function CollapsedGroup({ item, isGroupActive, linkClasses, groupButtonClasses, onNavigate }) {
+  const [open, setOpen] = useState(false)
+  const location = useLocation()
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(!open)}
+        className={groupButtonClasses(isGroupActive)}
+        title={item.name}
+      >
+        <item.icon size={20} />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute left-full top-0 z-20 ml-2 min-w-[160px] rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
+            <p className="px-3 py-1.5 text-xs font-semibold text-gray-400 uppercase">{item.name}</p>
+            {item.children.map((child) => {
+              const isActive = location.pathname.startsWith(child.to)
+              return (
+                <NavLink
+                  key={child.to}
+                  to={child.to}
+                  onClick={() => { setOpen(false); onNavigate() }}
+                  className={`block px-3 py-2 text-sm font-medium transition-colors ${
+                    isActive ? 'bg-primary-50 text-primary-700' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                  }`}
+                >
+                  {child.name}
+                </NavLink>
+              )
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 export default function Sidebar({ open, onClose, collapsed, onToggleCollapse }) {
   const { hasRole, profile, signOut } = useAuth()
   const location = useLocation()
@@ -126,17 +166,15 @@ export default function Sidebar({ open, onClose, collapsed, onToggleCollapse }) 
               const isOpen = !collapsed && (expanded[item.name] || isGroupActive)
 
               if (collapsed) {
-                const firstChild = item.children[0]
                 return (
-                  <NavLink
+                  <CollapsedGroup
                     key={item.name}
-                    to={firstChild.to}
-                    className={linkClasses}
-                    title={item.name}
-                    onClick={onClose}
-                  >
-                    <item.icon size={20} />
-                  </NavLink>
+                    item={item}
+                    isGroupActive={isGroupActive}
+                    linkClasses={linkClasses}
+                    groupButtonClasses={groupButtonClasses}
+                    onNavigate={onClose}
+                  />
                 )
               }
 
