@@ -15,6 +15,7 @@ export default function Courses() {
   const [courses, setCourses] = useState([])
   const [enrollments, setEnrollments] = useState([])
   const [members, setMembers] = useState([])
+  const [contacts, setContacts] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [showForm, setShowForm] = useState(false)
@@ -31,14 +32,16 @@ export default function Courses() {
   async function fetchData() {
     setLoading(true)
     try {
-      const [coursesRes, enrollRes, membersRes] = await Promise.all([
+      const [coursesRes, enrollRes, membersRes, contactsRes] = await Promise.all([
         supabase.from('courses').select('*').order('name'),
-        supabase.from('enrollments').select('*, member:member_id(first_name, last_name), course:course_id(name)'),
+        supabase.from('enrollments').select('*, member:member_id(first_name, last_name, is_member), course:course_id(name)'),
         supabase.from('users').select('id, first_name, last_name').eq('is_member', true).eq('status', 'attivo').order('last_name'),
+        supabase.from('users').select('id, first_name, last_name').eq('is_member', false).order('last_name'),
       ])
       setCourses(coursesRes.data || [])
       setEnrollments(enrollRes.data || [])
       setMembers(membersRes.data || [])
+      setContacts(contactsRes.data || [])
     } catch (err) {
       console.error('Courses fetch error:', err)
     } finally {
@@ -226,9 +229,16 @@ export default function Courses() {
                       {course.price ? `\u20AC ${Number(course.price).toFixed(2)}` : '-'}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3">
-                      <div className="flex gap-1.5">
+                      <div className="flex flex-wrap gap-1.5">
                         {course.is_youth && (
                           <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">Giovanile</span>
+                        )}
+                        {course.target_type && course.target_type !== 'atleti' && (
+                          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                            course.target_type === 'contatti' ? 'bg-orange-100 text-orange-700' : 'bg-purple-100 text-purple-700'
+                          }`}>
+                            {course.target_type === 'contatti' ? 'Contatti' : 'Atleti + Contatti'}
+                          </span>
                         )}
                         <Badge status={course.is_active ? 'attivo' : 'sospeso'}>
                           {course.is_active ? 'Attivo' : 'Inattivo'}
@@ -291,10 +301,21 @@ export default function Courses() {
               onChange={(e) => setEnrollMemberId(e.target.value)}
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500 focus:outline-none"
             >
-              <option value="">Seleziona atleta...</option>
-              {members.map((m) => (
-                <option key={m.id} value={m.id}>{m.last_name} {m.first_name}</option>
-              ))}
+              <option value="">Seleziona persona...</option>
+              {(selectedCourse.target_type === 'contatti' ? [] : members).length > 0 && (
+                <optgroup label="Atleti">
+                  {members.map((m) => (
+                    <option key={m.id} value={m.id}>{m.last_name} {m.first_name}</option>
+                  ))}
+                </optgroup>
+              )}
+              {(selectedCourse.target_type === 'atleti' ? [] : contacts).length > 0 && (
+                <optgroup label="Contatti Marketing">
+                  {contacts.map((m) => (
+                    <option key={m.id} value={m.id}>{m.last_name} {m.first_name}</option>
+                  ))}
+                </optgroup>
+              )}
             </select>
             <div className="flex justify-end gap-3">
               <button onClick={() => { setShowEnroll(false); setSelectedCourse(null) }} className="rounded-lg border border-gray-300 px-4 py-2 text-sm">Annulla</button>
@@ -334,6 +355,7 @@ function CourseForm({ course, onSaved, onCancel }) {
     price: course?.price || '',
     is_active: course?.is_active ?? true,
     is_youth: course?.is_youth ?? false,
+    target_type: course?.target_type || 'atleti',
   })
   const [multiDay, setMultiDay] = useState(!!(course?.end_date && course.end_date !== course.start_date))
   const [error, setError] = useState('')
@@ -448,6 +470,14 @@ function CourseForm({ course, onSaved, onCancel }) {
               <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition-transform ${form.is_youth ? 'translate-x-5' : 'translate-x-0'}`} />
             </button>
           </label>
+        </div>
+        <div>
+          <label className={labelClass}>Destinatari</label>
+          <select value={form.target_type} onChange={(e) => set('target_type', e.target.value)} className={inputClass}>
+            <option value="atleti">Solo Atleti</option>
+            <option value="contatti">Solo Contatti Marketing</option>
+            <option value="entrambi">Atleti e Contatti</option>
+          </select>
         </div>
       </div>
       <div className="flex justify-end gap-3 border-t pt-4">
