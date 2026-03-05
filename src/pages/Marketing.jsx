@@ -19,6 +19,11 @@ const IMPORT_CONTACT_COLUMNS = [
   { header: 'Note', field: 'notes' },
 ]
 
+const MEMBER_TYPES = [
+  { value: 'giovane', label: 'Giovane' },
+  { value: 'adulto', label: 'Adulto' },
+  { value: 'genitore', label: 'Genitore' },
+]
 const SOURCES = ['Sito web', 'Passaparola', 'Evento', 'Social', 'Volantino', 'Altro']
 const STATUSES = ['tutti', 'nuovo', 'contattato', 'interessato', 'convertito', 'perso']
 const PIPELINE_COLUMNS = [
@@ -100,7 +105,7 @@ export default function Marketing() {
     try {
       const { data, error } = await supabase
         .from('users')
-        .select('id, first_name, last_name, email, phone, source, interest, contact_status, notes, last_contacted_at, created_at, parent_id, preferred_contact_method, parent:parent_id(id, first_name, last_name, email, phone, preferred_contact_method)')
+        .select('id, first_name, last_name, email, phone, source, interest, contact_status, notes, last_contacted_at, created_at, parent_id, preferred_contact_method, member_type, parent:parent_id(id, first_name, last_name, email, phone, preferred_contact_method)')
         .eq('is_member', false)
         .order('created_at', { ascending: false })
       if (error) console.error('Marketing query error:', error)
@@ -445,6 +450,7 @@ export default function Marketing() {
                 <th className="hidden px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 lg:table-cell">Genitore</th>
                 <th className="hidden px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 lg:table-cell">Fonte</th>
                 <th className="hidden px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 lg:table-cell">Interesse</th>
+                <th className="hidden px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 lg:table-cell">Tipologia</th>
                 <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Stato</th>
                 <th className="hidden px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 md:table-cell">Ultimo contatto</th>
                 <th className="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500">Azioni</th>
@@ -468,6 +474,17 @@ export default function Marketing() {
                   </td>
                   <td className="hidden whitespace-nowrap px-4 py-3 text-sm text-gray-600 lg:table-cell">{contact.source || '-'}</td>
                   <td className="hidden whitespace-nowrap px-4 py-3 text-sm text-gray-600 lg:table-cell">{contact.interest || '-'}</td>
+                  <td className="hidden whitespace-nowrap px-4 py-3 text-sm lg:table-cell">
+                    {contact.member_type ? (
+                      <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
+                        contact.member_type === 'giovane' ? 'bg-blue-100 text-blue-700' :
+                        contact.member_type === 'adulto' ? 'bg-green-100 text-green-700' :
+                        'bg-purple-100 text-purple-700'
+                      }`}>
+                        {contact.member_type === 'giovane' ? 'Giovane' : contact.member_type === 'adulto' ? 'Adulto' : 'Genitore'}
+                      </span>
+                    ) : '-'}
+                  </td>
                   <td className="whitespace-nowrap px-4 py-3">
                     <select
                       value={contact.contact_status}
@@ -580,9 +597,20 @@ function KanbanCard({ contact, onEdit, onDelete, onConvert, onDragStart, onDragE
           <Users size={10} /> {getFullName(contact.parent)}
         </p>
       )}
-      {contact.interest && (
-        <span className="mt-1.5 inline-block rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">{contact.interest}</span>
-      )}
+      <div className="mt-1.5 flex flex-wrap gap-1">
+        {contact.interest && (
+          <span className="inline-block rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">{contact.interest}</span>
+        )}
+        {contact.member_type && (
+          <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
+            contact.member_type === 'giovane' ? 'bg-blue-100 text-blue-700' :
+            contact.member_type === 'adulto' ? 'bg-green-100 text-green-700' :
+            'bg-purple-100 text-purple-700'
+          }`}>
+            {contact.member_type === 'giovane' ? 'Giovane' : contact.member_type === 'adulto' ? 'Adulto' : 'Genitore'}
+          </span>
+        )}
+      </div>
       <div className="mt-2 flex items-center justify-between border-t border-gray-100 pt-2">
         <select
           value={contact.contact_status}
@@ -733,6 +761,15 @@ function ParentChildRow({ contact, onEdit, onDelete, onConvert, onStatusChange }
         </div>
       </div>
       <div className="flex items-center gap-2">
+        {contact.member_type && (
+          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+            contact.member_type === 'giovane' ? 'bg-blue-100 text-blue-700' :
+            contact.member_type === 'adulto' ? 'bg-green-100 text-green-700' :
+            'bg-purple-100 text-purple-700'
+          }`}>
+            {contact.member_type === 'giovane' ? 'Giovane' : contact.member_type === 'adulto' ? 'Adulto' : 'Genitore'}
+          </span>
+        )}
         {contact.interest && (
           <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">{contact.interest}</span>
         )}
@@ -779,6 +816,7 @@ function ContactForm({ contact, contacts = [], onSaved, onCancel }) {
     notes: contact?.notes || '',
     parent_id: contact?.parent_id || '',
     preferred_contact_method: contact?.preferred_contact_method || '',
+    member_type: contact?.member_type || '',
   })
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -869,6 +907,13 @@ function ContactForm({ contact, contacts = [], onSaved, onCancel }) {
             <option value="interessato">Interessato</option>
             <option value="convertito">Convertito</option>
             <option value="perso">Perso</option>
+          </select>
+        </div>
+        <div>
+          <label className="mb-1 block text-sm font-medium text-gray-700">Tipologia</label>
+          <select value={form.member_type || ''} onChange={(e) => set('member_type', e.target.value)} className={inputClass}>
+            <option value="">--</option>
+            {MEMBER_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
           </select>
         </div>
       </div>
