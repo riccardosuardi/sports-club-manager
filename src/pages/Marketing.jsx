@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
+import ReactDOM from 'react-dom'
 import { Plus, Megaphone, UserPlus, Phone, Mail, LayoutList, Columns3, Upload, Download, FileDown, CheckCircle2, AlertCircle, Users, Eye, Pencil, Trash2, MessageCircle, ChevronDown, ChevronRight, ChevronUp, GripVertical, Search, X, Link, CheckSquare } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { formatDate, formatDateTime, getFullName, calculateAge } from '../lib/utils'
@@ -101,6 +102,18 @@ export default function Marketing() {
   const [filterTypes, setFilterTypes] = useState(new Set()) // empty = show all
   const [sortBy, setSortBy] = useState(null) // 'name' | 'contacts' | 'type'
   const [sortDir, setSortDir] = useState('asc')
+  const searchInputRef = useRef(null)
+
+  useEffect(() => {
+    function handleKeyDown(e) {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
+        e.preventDefault()
+        searchInputRef.current?.focus()
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [])
 
   useEffect(() => { fetchContacts() }, [])
 
@@ -365,7 +378,7 @@ export default function Marketing() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <div className="sm:w-80">
-            <SearchInput value={search} onChange={setSearch} placeholder="Cerca contatti..." />
+            <SearchInput ref={searchInputRef} value={search} onChange={setSearch} placeholder="Cerca contatti..." />
           </div>
           {viewMode === 'list' && (
             <div className="flex items-center gap-3">
@@ -990,18 +1003,26 @@ function ParentCell({ contact, contacts, onAssign }) {
   const [search, setSearch] = useState('')
   const ref = useRef(null)
   const inputRef = useRef(null)
+  const dropdownRef = useRef(null)
+  const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0 })
 
   useEffect(() => {
     if (!open) return
     function handleClickOutside(e) {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false)
+      if (ref.current && !ref.current.contains(e.target) && dropdownRef.current && !dropdownRef.current.contains(e.target)) setOpen(false)
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [open])
 
   useEffect(() => {
-    if (open && inputRef.current) inputRef.current.focus()
+    if (open && inputRef.current) {
+      inputRef.current.focus()
+      const rect = ref.current?.getBoundingClientRect()
+      if (rect) {
+        setDropdownPos({ top: rect.top - 4, left: rect.left })
+      }
+    }
   }, [open])
 
   const candidates = contacts.filter(c => c.id !== contact.id)
@@ -1043,6 +1064,40 @@ function ParentCell({ contact, contacts, onAssign }) {
     )
   }
 
+  const dropdown = (
+    <div
+      ref={dropdownRef}
+      className="fixed z-50 max-h-48 w-64 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg"
+      style={{ top: dropdownPos.top, left: dropdownPos.left, transform: 'translateY(-100%)' }}
+    >
+      {filtered.length === 0 ? (
+        <p className="px-3 py-2 text-xs text-gray-400">Nessun risultato</p>
+      ) : (
+        filtered.map(c => (
+          <button
+            key={c.id}
+            onClick={() => { onAssign(contact.id, c.id); setOpen(false); setSearch('') }}
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-gray-50"
+          >
+            <span className="font-medium text-gray-900">{c.last_name} {c.first_name}</span>
+            {c.last_name?.toLowerCase() === contact.last_name?.toLowerCase() && (
+              <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">stesso cognome</span>
+            )}
+            {c.member_type && (
+              <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
+                c.member_type === 'giovane' ? 'bg-blue-100 text-blue-700' :
+                c.member_type === 'adulto' ? 'bg-green-100 text-green-700' :
+                'bg-purple-100 text-purple-700'
+              }`}>
+                {c.member_type === 'giovane' ? 'Giovane' : c.member_type === 'adulto' ? 'Adulto' : 'Genitore'}
+              </span>
+            )}
+          </button>
+        ))
+      )}
+    </div>
+  )
+
   return (
     <div ref={ref} className="relative">
       <div className="flex items-center gap-1">
@@ -1067,33 +1122,7 @@ function ParentCell({ contact, contacts, onAssign }) {
           </button>
         )}
       </div>
-      <div className="absolute left-0 bottom-full z-20 mb-1 max-h-48 w-64 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
-        {filtered.length === 0 ? (
-          <p className="px-3 py-2 text-xs text-gray-400">Nessun risultato</p>
-        ) : (
-          filtered.map(c => (
-            <button
-              key={c.id}
-              onClick={() => { onAssign(contact.id, c.id); setOpen(false); setSearch('') }}
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-gray-50"
-            >
-              <span className="font-medium text-gray-900">{c.last_name} {c.first_name}</span>
-              {c.last_name?.toLowerCase() === contact.last_name?.toLowerCase() && (
-                <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">stesso cognome</span>
-              )}
-              {c.member_type && (
-                <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
-                  c.member_type === 'giovane' ? 'bg-blue-100 text-blue-700' :
-                  c.member_type === 'adulto' ? 'bg-green-100 text-green-700' :
-                  'bg-purple-100 text-purple-700'
-                }`}>
-                  {c.member_type === 'giovane' ? 'Giovane' : c.member_type === 'adulto' ? 'Adulto' : 'Genitore'}
-                </span>
-              )}
-            </button>
-          ))
-        )}
-      </div>
+      {ReactDOM.createPortal(dropdown, document.body)}
     </div>
   )
 }
