@@ -1,5 +1,5 @@
-import { useEffect, useState, useRef } from 'react'
-import { Plus, Megaphone, UserPlus, Phone, Mail, LayoutList, Columns3, Upload, Download, FileDown, CheckCircle2, AlertCircle, Users, Eye, Pencil, Trash2, MessageCircle, ChevronDown, ChevronRight, GripVertical } from 'lucide-react'
+import { useEffect, useState, useRef, useCallback } from 'react'
+import { Plus, Megaphone, UserPlus, Phone, Mail, LayoutList, Columns3, Upload, Download, FileDown, CheckCircle2, AlertCircle, Users, Eye, Pencil, Trash2, MessageCircle, ChevronDown, ChevronRight, GripVertical, Search, X, Link } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { formatDate, formatDateTime, getFullName } from '../lib/utils'
 import Badge from '../components/ui/Badge'
@@ -137,6 +137,17 @@ export default function Marketing() {
   async function handleStatusChange(contactId, newStatus) {
     await supabase.from('users').update({ contact_status: newStatus, last_contacted_at: new Date().toISOString() }).eq('id', contactId)
     setContacts(prev => prev.map(c => c.id === contactId ? { ...c, contact_status: newStatus } : c))
+  }
+
+  async function handleAssignParent(childId, parentId) {
+    const { error } = await supabase.from('users').update({ parent_id: parentId || null }).eq('id', childId)
+    if (error) { console.error('Assign parent error:', error); return }
+    const parent = parentId ? contacts.find(c => c.id === parentId) : null
+    setContacts(prev => prev.map(c =>
+      c.id === childId
+        ? { ...c, parent_id: parentId || null, parent: parent ? { id: parent.id, first_name: parent.first_name, last_name: parent.last_name, email: parent.email, phone: parent.phone, preferred_contact_method: parent.preferred_contact_method } : null }
+        : c
+    ))
   }
 
   // Drag and drop handlers
@@ -441,9 +452,9 @@ export default function Marketing() {
         <EmptyState icon={Megaphone} title="Nessun contatto trovato" description="Aggiungi il primo contatto" />
       ) : (
         /* ===== LIST VIEW ===== */
-        <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
+        <div className="overflow-auto rounded-lg border border-gray-200 bg-white" style={{ maxHeight: 'calc(100vh - 260px)', willChange: 'transform' }}>
           <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
+            <thead className="bg-gray-50 sticky top-0 z-10">
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Nome</th>
                 <th className="hidden px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 md:table-cell">Contatti</th>
@@ -469,8 +480,12 @@ export default function Marketing() {
                       {contact.phone && <div className="flex items-center gap-1"><Phone size={12} /> {contact.phone}</div>}
                     </div>
                   </td>
-                  <td className="hidden whitespace-nowrap px-4 py-3 text-sm text-gray-600 lg:table-cell">
-                    {contact.parent ? getFullName(contact.parent) : '-'}
+                  <td className="hidden px-4 py-3 text-sm text-gray-600 lg:table-cell">
+                    <ParentCell
+                      contact={contact}
+                      contacts={contacts}
+                      onAssign={handleAssignParent}
+                    />
                   </td>
                   <td className="hidden whitespace-nowrap px-4 py-3 text-sm text-gray-600 lg:table-cell">{contact.source || '-'}</td>
                   <td className="hidden whitespace-nowrap px-4 py-3 text-sm text-gray-600 lg:table-cell">{contact.interest || '-'}</td>
@@ -798,6 +813,120 @@ function ParentChildRow({ contact, onEdit, onDelete, onConvert, onStatusChange }
             <Trash2 size={16} />
           </button>
         </div>
+      </div>
+    </div>
+  )
+}
+
+/* ===== Parent Cell (inline search) ===== */
+function ParentCell({ contact, contacts, onAssign }) {
+  const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState('')
+  const ref = useRef(null)
+  const inputRef = useRef(null)
+
+  useEffect(() => {
+    if (!open) return
+    function handleClickOutside(e) {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [open])
+
+  useEffect(() => {
+    if (open && inputRef.current) inputRef.current.focus()
+  }, [open])
+
+  const candidates = contacts.filter(c => c.id !== contact.id)
+
+  // Sort: same last_name first, then by search match
+  const filtered = candidates
+    .filter(c => {
+      if (!search) return true
+      const name = `${c.first_name} ${c.last_name}`.toLowerCase()
+      return name.includes(search.toLowerCase())
+    })
+    .sort((a, b) => {
+      const aMatch = a.last_name?.toLowerCase() === contact.last_name?.toLowerCase() ? 0 : 1
+      const bMatch = b.last_name?.toLowerCase() === contact.last_name?.toLowerCase() ? 0 : 1
+      if (aMatch !== bMatch) return aMatch - bMatch
+      return `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`)
+    })
+    .slice(0, 20)
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        className="group flex items-center gap-1 rounded px-1 py-0.5 hover:bg-gray-100 text-left w-full"
+        title="Clicca per associare un genitore"
+      >
+        {contact.parent ? (
+          <>
+            <span>{getFullName(contact.parent)}</span>
+            <Pencil size={12} className="text-gray-400 opacity-0 group-hover:opacity-100 shrink-0" />
+          </>
+        ) : (
+          <span className="text-gray-400 flex items-center gap-1">
+            <Link size={12} />
+            <span className="opacity-0 group-hover:opacity-100">Associa</span>
+          </span>
+        )}
+      </button>
+    )
+  }
+
+  return (
+    <div ref={ref} className="relative">
+      <div className="flex items-center gap-1">
+        <div className="relative flex-1">
+          <Search size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input
+            ref={inputRef}
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Cerca per nome..."
+            className="w-full rounded border border-gray-300 py-1 pl-7 pr-2 text-xs focus:border-primary-500 focus:ring-1 focus:ring-primary-500 focus:outline-none"
+          />
+        </div>
+        {contact.parent_id && (
+          <button
+            onClick={() => { onAssign(contact.id, null); setOpen(false) }}
+            className="rounded p-1 text-red-500 hover:bg-red-50 shrink-0"
+            title="Rimuovi genitore"
+          >
+            <X size={14} />
+          </button>
+        )}
+      </div>
+      <div className="absolute left-0 top-full z-20 mt-1 max-h-48 w-64 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+        {filtered.length === 0 ? (
+          <p className="px-3 py-2 text-xs text-gray-400">Nessun risultato</p>
+        ) : (
+          filtered.map(c => (
+            <button
+              key={c.id}
+              onClick={() => { onAssign(contact.id, c.id); setOpen(false); setSearch('') }}
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-gray-50"
+            >
+              <span className="font-medium text-gray-900">{c.last_name} {c.first_name}</span>
+              {c.last_name?.toLowerCase() === contact.last_name?.toLowerCase() && (
+                <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">stesso cognome</span>
+              )}
+              {c.member_type && (
+                <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
+                  c.member_type === 'giovane' ? 'bg-blue-100 text-blue-700' :
+                  c.member_type === 'adulto' ? 'bg-green-100 text-green-700' :
+                  'bg-purple-100 text-purple-700'
+                }`}>
+                  {c.member_type === 'giovane' ? 'Giovane' : c.member_type === 'adulto' ? 'Adulto' : 'Genitore'}
+                </span>
+              )}
+            </button>
+          ))
+        )}
       </div>
     </div>
   )
