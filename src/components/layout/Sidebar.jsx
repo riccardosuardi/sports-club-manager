@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard,
@@ -56,13 +57,31 @@ const navigation = [
 ]
 
 function Tooltip({ label, children }) {
+  const [show, setShow] = useState(false)
+  const [pos, setPos] = useState({ top: 0, left: 0 })
+  const ref = useRef(null)
+
+  function handleEnter() {
+    if (ref.current) {
+      const rect = ref.current.getBoundingClientRect()
+      setPos({ top: rect.top + rect.height / 2, left: rect.right + 8 })
+    }
+    setShow(true)
+  }
+
   return (
-    <div className="group relative">
+    <div ref={ref} onMouseEnter={handleEnter} onMouseLeave={() => setShow(false)}>
       {children}
-      <div className="pointer-events-none absolute left-full top-1/2 z-50 ml-2 -translate-y-1/2 whitespace-nowrap rounded-md bg-gray-900 px-2.5 py-1.5 text-xs font-medium text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
-        {label}
-        <div className="absolute right-full top-1/2 -translate-y-1/2 border-4 border-transparent border-r-gray-900" />
-      </div>
+      {show && createPortal(
+        <div
+          className="pointer-events-none fixed z-[9999] -translate-y-1/2 whitespace-nowrap rounded-md bg-gray-900 px-2.5 py-1.5 text-xs font-medium text-white shadow-lg"
+          style={{ top: pos.top, left: pos.left }}
+        >
+          {label}
+          <div className="absolute right-full top-1/2 -translate-y-1/2 border-4 border-transparent border-r-gray-900" />
+        </div>,
+        document.body
+      )}
     </div>
   )
 }
