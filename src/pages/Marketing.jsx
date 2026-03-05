@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
-import { Plus, Megaphone, UserPlus, Phone, Mail, LayoutList, Columns3, Upload, Download, FileDown, CheckCircle2, AlertCircle, Users, Eye, Pencil, Trash2, MessageCircle, ChevronDown, ChevronRight, GripVertical, Search, X, Link } from 'lucide-react'
+import { Plus, Megaphone, UserPlus, Phone, Mail, LayoutList, Columns3, Upload, Download, FileDown, CheckCircle2, AlertCircle, Users, Eye, Pencil, Trash2, MessageCircle, ChevronDown, ChevronRight, GripVertical, Search, X, Link, CheckSquare } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { formatDate, formatDateTime, getFullName, calculateAge } from '../lib/utils'
 import Badge from '../components/ui/Badge'
@@ -97,6 +97,8 @@ export default function Marketing() {
   const [boardGroupBy, setBoardGroupBy] = useState('athlete') // 'athlete' | 'parent'
   const [showImportModal, setShowImportModal] = useState(false)
   const [draggedContact, setDraggedContact] = useState(null)
+  const [selectedIds, setSelectedIds] = useState(new Set())
+  const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false)
 
   useEffect(() => { fetchContacts() }, [])
 
@@ -184,6 +186,46 @@ export default function Marketing() {
       handleStatusChange(draggedContact.id, newStatus)
     }
     setDraggedContact(null)
+  }
+
+  function toggleSelect(id) {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function toggleSelectAll(filteredContacts) {
+    setSelectedIds(prev => {
+      const allSelected = filteredContacts.every(c => prev.has(c.id))
+      if (allSelected) return new Set()
+      return new Set(filteredContacts.map(c => c.id))
+    })
+  }
+
+  async function handleBulkMemberType(type) {
+    const ids = [...selectedIds]
+    const { error } = await supabase.from('users').update({ member_type: type }).in('id', ids)
+    if (error) { console.error('Bulk update error:', error); return }
+    setContacts(prev => prev.map(c => ids.includes(c.id) ? { ...c, member_type: type } : c))
+    setSelectedIds(new Set())
+  }
+
+  async function handleInlineUpdate(contactId, field, value) {
+    const { error } = await supabase.from('users').update({ [field]: value || null }).eq('id', contactId)
+    if (error) { console.error('Inline update error:', error); return }
+    setContacts(prev => prev.map(c => c.id === contactId ? { ...c, [field]: value || null } : c))
+  }
+
+  async function handleBulkDelete() {
+    const ids = [...selectedIds]
+    const { error } = await supabase.from('users').delete().in('id', ids)
+    if (error) { console.error('Bulk delete error:', error); return }
+    setContacts(prev => prev.filter(c => !ids.includes(c.id)))
+    setSelectedIds(new Set())
+    setBulkDeleteConfirm(false)
   }
 
   const filtered = contacts.filter((c) => {
@@ -452,10 +494,55 @@ export default function Marketing() {
         <EmptyState icon={Megaphone} title="Nessun contatto trovato" description="Aggiungi il primo contatto" />
       ) : (
         /* ===== LIST VIEW ===== */
+        <>
+        {selectedIds.size > 0 && (
+          <div className="mb-2 flex items-center gap-3 rounded-lg border border-primary-200 bg-primary-50 px-4 py-2">
+            <span className="text-sm font-medium text-primary-700">
+              {selectedIds.size} selezionat{selectedIds.size === 1 ? 'o' : 'i'}
+            </span>
+            <div className="h-4 w-px bg-primary-200" />
+            <span className="text-xs text-gray-500">Tipologia:</span>
+            {MEMBER_TYPES.map(t => (
+              <button
+                key={t.value}
+                onClick={() => handleBulkMemberType(t.value)}
+                className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+                  t.value === 'giovane' ? 'bg-blue-100 text-blue-700 hover:bg-blue-200' :
+                  t.value === 'adulto' ? 'bg-green-100 text-green-700 hover:bg-green-200' :
+                  'bg-purple-100 text-purple-700 hover:bg-purple-200'
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+            <div className="h-4 w-px bg-primary-200" />
+            <button
+              onClick={() => setBulkDeleteConfirm(true)}
+              className="flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium text-red-600 hover:bg-red-100"
+            >
+              <Trash2 size={14} />
+              Elimina
+            </button>
+            <button
+              onClick={() => setSelectedIds(new Set())}
+              className="ml-auto text-xs text-gray-500 hover:text-gray-700"
+            >
+              Deseleziona tutto
+            </button>
+          </div>
+        )}
         <div className="overflow-auto rounded-lg border border-gray-200 bg-white" style={{ maxHeight: 'calc(100vh - 260px)', willChange: 'transform' }}>
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50 sticky top-0 z-10">
               <tr>
+                <th className="w-10 px-3 py-3">
+                  <input
+                    type="checkbox"
+                    checked={filtered.length > 0 && filtered.every(c => selectedIds.has(c.id))}
+                    onChange={() => toggleSelectAll(filtered)}
+                    className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                  />
+                </th>
                 <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Nome</th>
                 <th className="hidden px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 md:table-cell">Contatti</th>
                 <th className="hidden px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 lg:table-cell">Genitore</th>
@@ -469,7 +556,15 @@ export default function Marketing() {
             </thead>
             <tbody className="divide-y divide-gray-200">
               {filtered.map((contact) => (
-                <tr key={contact.id} className="hover:bg-gray-50">
+                <tr key={contact.id} className={`hover:bg-gray-50 ${selectedIds.has(contact.id) ? 'bg-primary-50' : ''}`}>
+                  <td className="w-10 px-3 py-3">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(contact.id)}
+                      onChange={() => toggleSelect(contact.id)}
+                      className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                    />
+                  </td>
                   <td className="whitespace-nowrap px-4 py-3">
                     <p className="font-medium text-gray-900">
                       {contact.first_name} {contact.last_name}
@@ -492,18 +587,26 @@ export default function Marketing() {
                       onAssign={handleAssignParent}
                     />
                   </td>
-                  <td className="hidden whitespace-nowrap px-4 py-3 text-sm text-gray-600 lg:table-cell">{contact.source || '-'}</td>
+                  <td className="hidden whitespace-nowrap px-4 py-3 text-sm lg:table-cell">
+                    <select
+                      value={contact.source || ''}
+                      onChange={(e) => handleInlineUpdate(contact.id, 'source', e.target.value)}
+                      className="rounded border border-gray-300 px-2 py-1 text-xs"
+                    >
+                      <option value="">-</option>
+                      {SOURCES.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </td>
                   <td className="hidden whitespace-nowrap px-4 py-3 text-sm text-gray-600 lg:table-cell">{contact.interest || '-'}</td>
                   <td className="hidden whitespace-nowrap px-4 py-3 text-sm lg:table-cell">
-                    {contact.member_type ? (
-                      <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
-                        contact.member_type === 'giovane' ? 'bg-blue-100 text-blue-700' :
-                        contact.member_type === 'adulto' ? 'bg-green-100 text-green-700' :
-                        'bg-purple-100 text-purple-700'
-                      }`}>
-                        {contact.member_type === 'giovane' ? 'Giovane' : contact.member_type === 'adulto' ? 'Adulto' : 'Genitore'}
-                      </span>
-                    ) : '-'}
+                    <select
+                      value={contact.member_type || ''}
+                      onChange={(e) => handleInlineUpdate(contact.id, 'member_type', e.target.value)}
+                      className="rounded border border-gray-300 px-2 py-1 text-xs"
+                    >
+                      <option value="">-</option>
+                      {MEMBER_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                    </select>
                   </td>
                   <td className="whitespace-nowrap px-4 py-3">
                     <select
@@ -542,7 +645,18 @@ export default function Marketing() {
             </tbody>
           </table>
         </div>
+        </>
       )}
+
+      <ConfirmDialog
+        open={bulkDeleteConfirm}
+        onClose={() => setBulkDeleteConfirm(false)}
+        onConfirm={handleBulkDelete}
+        title="Elimina contatti selezionati"
+        message={`Sei sicuro di voler eliminare ${selectedIds.size} contatt${selectedIds.size === 1 ? 'o' : 'i'}? Questa azione non può essere annullata.`}
+        confirmText="Elimina"
+        variant="danger"
+      />
 
       <Modal open={showEmail} onClose={() => setShowEmail(false)} title="Invia Comunicazione Email" size="lg">
         <EmailCompose contacts={filtered.filter(c => c.email)} onClose={() => setShowEmail(false)} />
