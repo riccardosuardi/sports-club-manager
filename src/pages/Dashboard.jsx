@@ -25,61 +25,62 @@ export default function Dashboard() {
     const todayMonth = String(today.getMonth() + 1).padStart(2, '0')
     const todayDay = String(today.getDate()).padStart(2, '0')
 
-    const [
-      membersRes,
-      recentMembersRes,
-      expiringCertsRes,
-      birthdayRes,
-      coursesRes,
-      enrollmentsRes,
-      contactsRes,
-      ordersRes,
-      competitionsRes,
-    ] = await Promise.all([
-      // Only fetch fields needed for stats
-      supabase.from('users').select('id, status, is_minor, medical_certificate_expiry').eq('is_member', true),
-      // Recent 5 members
-      supabase.from('users').select('id, first_name, last_name, email, status, created_at').eq('is_member', true).order('created_at', { ascending: false }).limit(5),
-      // Expiring certs (next 30 days + already expired)
-      supabase.from('users').select('id, first_name, last_name, medical_certificate_expiry').eq('is_member', true).not('medical_certificate_expiry', 'is', null).lte('medical_certificate_expiry', new Date(today.getTime() + 30 * 86400000).toISOString().split('T')[0]).order('medical_certificate_expiry').limit(10),
-      // Today birthdays
-      supabase.from('users').select('id, first_name, last_name, date_of_birth').eq('is_member', true).like('date_of_birth', `%-${todayMonth}-${todayDay}`),
-      supabase.from('courses').select('id, is_active'),
-      supabase.from('enrollments').select('id, status'),
-      supabase.from('users').select('id, contact_status').eq('is_member', false),
-      supabase.from('clothing_orders').select('*, member:member_id(first_name, last_name), item:item_id(name)').in('status', ['richiesto', 'ordinato']).order('ordered_at', { ascending: false }).limit(5),
-      supabase.from('competitions').select('id, name, competition_date, status, location, city, sport').gte('competition_date', todayStr).order('competition_date').limit(5),
-    ])
+    try {
+      const [
+        membersRes,
+        recentMembersRes,
+        expiringCertsRes,
+        birthdayRes,
+        coursesRes,
+        enrollmentsRes,
+        contactsRes,
+        ordersRes,
+        competitionsRes,
+      ] = await Promise.all([
+        supabase.from('users').select('id, status, is_minor, medical_certificate_expiry').eq('is_member', true),
+        supabase.from('users').select('id, first_name, last_name, email, status, created_at').eq('is_member', true).order('created_at', { ascending: false }).limit(5),
+        supabase.from('users').select('id, first_name, last_name, medical_certificate_expiry').eq('is_member', true).not('medical_certificate_expiry', 'is', null).lte('medical_certificate_expiry', new Date(today.getTime() + 30 * 86400000).toISOString().split('T')[0]).order('medical_certificate_expiry').limit(10),
+        supabase.from('users').select('id, first_name, last_name, date_of_birth').eq('is_member', true).like('date_of_birth', `%-${todayMonth}-${todayDay}`),
+        supabase.from('courses').select('id, is_active'),
+        supabase.from('enrollments').select('id, status'),
+        supabase.from('users').select('id, contact_status').eq('is_member', false),
+        supabase.from('clothing_orders').select('*, member:member_id(first_name, last_name), item:item_id(name)').in('status', ['richiesto', 'ordinato']).order('ordered_at', { ascending: false }).limit(5),
+        supabase.from('competitions').select('id, name, competition_date, status, location, city, sport').gte('competition_date', todayStr).order('competition_date').limit(5),
+      ])
 
-    const members = membersRes.data || []
-    const courses = coursesRes.data || []
-    const enrollments = enrollmentsRes.data || []
-    const contacts = contactsRes.data || []
+      const members = membersRes.data || []
+      const courses = coursesRes.data || []
+      const enrollments = enrollmentsRes.data || []
+      const contacts = contactsRes.data || []
 
-    setStats({
-      totalMembers: members.length,
-      activeMembers: members.filter(m => m.status === 'attivo').length,
-      minors: members.filter(m => m.is_minor).length,
-      activeCourses: courses.filter(c => c.is_active).length,
-      activeEnrollments: enrollments.filter(e => e.status === 'attivo').length,
-      newContacts: contacts.filter(c => c.contact_status === 'nuovo').length,
-      expiredCerts: members.filter(m => isCertificateExpired(m.medical_certificate_expiry)).length,
-      expiringSoon: members.filter(m => isCertificateExpiringSoon(m.medical_certificate_expiry)).length,
-    })
+      setStats({
+        totalMembers: members.length,
+        activeMembers: members.filter(m => m.status === 'attivo').length,
+        minors: members.filter(m => m.is_minor).length,
+        activeCourses: courses.filter(c => c.is_active).length,
+        activeEnrollments: enrollments.filter(e => e.status === 'attivo').length,
+        newContacts: contacts.filter(c => c.contact_status === 'nuovo').length,
+        expiredCerts: members.filter(m => isCertificateExpired(m.medical_certificate_expiry)).length,
+        expiringSoon: members.filter(m => isCertificateExpiringSoon(m.medical_certificate_expiry)).length,
+      })
 
-    setRecentMembers(recentMembersRes.data || [])
+      setRecentMembers(recentMembersRes.data || [])
 
-    const certData = expiringCertsRes.data || []
-    setExpiringCerts(
-      certData
-        .filter(m => isCertificateExpired(m.medical_certificate_expiry) || isCertificateExpiringSoon(m.medical_certificate_expiry))
-        .slice(0, 5)
-    )
+      const certData = expiringCertsRes.data || []
+      setExpiringCerts(
+        certData
+          .filter(m => isCertificateExpired(m.medical_certificate_expiry) || isCertificateExpiringSoon(m.medical_certificate_expiry))
+          .slice(0, 5)
+      )
 
-    setTodayBirthdays(birthdayRes.data || [])
-    setPendingOrders(ordersRes.data || [])
-    setUpcomingCompetitions(competitionsRes.data || [])
-    setLoading(false)
+      setTodayBirthdays(birthdayRes.data || [])
+      setPendingOrders(ordersRes.data || [])
+      setUpcomingCompetitions(competitionsRes.data || [])
+    } catch (err) {
+      console.error('Dashboard fetch error:', err)
+    } finally {
+      setLoading(false)
+    }
   }
 
   if (loading) return <div className="py-12 text-center text-gray-500">Caricamento dashboard...</div>

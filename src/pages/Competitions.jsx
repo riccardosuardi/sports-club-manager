@@ -84,15 +84,20 @@ export default function Competitions() {
 
   async function fetchData() {
     setLoading(true)
-    const [compRes, membersRes, assocRes] = await Promise.all([
-      supabase.from('competitions').select('id, name, description, competition_date, competition_end_date, start_time, end_time, location, address, city, province, status, max_participants, registration_deadline, notes, is_home, sport').order('competition_date', { ascending: true }),
-      supabase.from('users').select('id, first_name, last_name, member_type').eq('is_member', true).eq('status', 'attivo').order('last_name'),
-      supabase.from('association_settings').select('*').limit(1).single(),
-    ])
-    if (!compRes.error) setCompetitions(compRes.data || [])
-    if (!membersRes.error) setMembers(membersRes.data || [])
-    if (assocRes.data) setAssocSettings(assocRes.data)
-    setLoading(false)
+    try {
+      const [compRes, membersRes, assocRes] = await Promise.all([
+        supabase.from('competitions').select('id, name, description, competition_date, competition_end_date, start_time, end_time, location, address, city, province, status, max_participants, registration_deadline, notes, is_home, sport').order('competition_date', { ascending: true }),
+        supabase.from('users').select('id, first_name, last_name, member_type').eq('is_member', true).eq('status', 'attivo').order('last_name'),
+        supabase.from('association_settings').select('*').limit(1).maybeSingle(),
+      ])
+      if (!compRes.error) setCompetitions(compRes.data || [])
+      if (!membersRes.error) setMembers(membersRes.data || [])
+      if (assocRes.data) setAssocSettings(assocRes.data)
+    } catch (err) {
+      console.error('Competitions fetch error:', err)
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => {

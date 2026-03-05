@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Baby, Users, GraduationCap, Phone, Mail, Clock, MapPin } from 'lucide-react'
+import { Baby, Users, GraduationCap, Phone, Mail, Clock, MapPin, Eye } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { getFullName, calculateAge, formatDate } from '../lib/utils'
 import Badge from '../components/ui/Badge'
@@ -21,22 +21,26 @@ export default function YouthActivities() {
 
   async function fetchData() {
     setLoading(true)
-    const [membersRes, coursesRes, enrollRes] = await Promise.all([
-      supabase.from('users').select('*, parent:parent_id(id, first_name, last_name)').eq('is_member', true).order('last_name'),
-      supabase.from('courses').select('*').eq('is_youth', true).order('name'),
-      supabase.from('enrollments').select('*, member:member_id(id, first_name, last_name, is_minor), course:course_id(id, name, is_youth)').eq('status', 'attivo'),
-    ])
-    const allMembers = membersRes.data || []
-    const minorsList = allMembers.filter(m => m.is_minor)
-    setMinors(minorsList)
+    try {
+      const [membersRes, coursesRes, enrollRes] = await Promise.all([
+        supabase.from('users').select('*, parent:parent_id(id, first_name, last_name)').eq('is_member', true).order('last_name'),
+        supabase.from('courses').select('*').eq('is_youth', true).order('name'),
+        supabase.from('enrollments').select('*, member:member_id(id, first_name, last_name, is_minor), course:course_id(id, name, is_youth)').eq('status', 'attivo'),
+      ])
+      const allMembers = membersRes.data || []
+      const minorsList = allMembers.filter(m => m.is_minor)
+      setMinors(minorsList)
 
-    // Genitori: chi ha figli minorenni o è di tipo "genitore"
-    const parentIds = new Set(minorsList.filter(m => m.parent_id).map(m => m.parent_id))
-    setParents(allMembers.filter(m => parentIds.has(m.id) || m.member_type === 'genitore'))
+      const parentIds = new Set(minorsList.filter(m => m.parent_id).map(m => m.parent_id))
+      setParents(allMembers.filter(m => parentIds.has(m.id) || m.member_type === 'genitore'))
 
-    setYouthCourses(coursesRes.data || [])
-    setEnrollments(enrollRes.data || [])
-    setLoading(false)
+      setYouthCourses(coursesRes.data || [])
+      setEnrollments(enrollRes.data || [])
+    } catch (err) {
+      console.error('YouthActivities fetch error:', err)
+    } finally {
+      setLoading(false)
+    }
   }
 
   const filteredMinors = minors.filter(m =>
@@ -142,8 +146,8 @@ export default function YouthActivities() {
                         <Badge status={m.status} />
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-right">
-                        <button onClick={() => navigate(`/atleti/${m.id}`)} className="text-sm text-primary-600 hover:text-primary-700">
-                          Dettagli
+                        <button onClick={() => navigate(`/atleti/${m.id}`)} className="rounded-lg p-1.5 text-primary-600 hover:bg-primary-50" title="Dettagli">
+                          <Eye size={16} />
                         </button>
                       </td>
                     </tr>
@@ -202,8 +206,8 @@ export default function YouthActivities() {
                         )}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-right">
-                        <button onClick={() => navigate(`/atleti/${p.id}`)} className="text-sm text-primary-600 hover:text-primary-700">
-                          Dettagli
+                        <button onClick={() => navigate(`/atleti/${p.id}`)} className="rounded-lg p-1.5 text-primary-600 hover:bg-primary-50" title="Dettagli">
+                          <Eye size={16} />
                         </button>
                       </td>
                     </tr>

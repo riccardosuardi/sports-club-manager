@@ -40,20 +40,25 @@ export default function SettingsAssociation() {
 
   async function fetchSettings() {
     setLoading(true)
-    const [settingsRes, membersRes] = await Promise.all([
-      supabase.from('association_settings').select('*').limit(1).single(),
-      supabase.from('users').select('id, first_name, last_name, member_type').eq('is_member', true).order('last_name'),
-    ])
-    if (settingsRes.data) {
-      const data = { ...DEFAULT_SETTINGS, ...settingsRes.data }
-      if (typeof data.organigramma === 'string') {
-        try { data.organigramma = JSON.parse(data.organigramma) } catch { data.organigramma = [] }
+    try {
+      const [settingsRes, membersRes] = await Promise.all([
+        supabase.from('association_settings').select('*').limit(1).maybeSingle(),
+        supabase.from('users').select('id, first_name, last_name, member_type').eq('is_member', true).order('last_name'),
+      ])
+      if (settingsRes.data) {
+        const data = { ...DEFAULT_SETTINGS, ...settingsRes.data }
+        if (typeof data.organigramma === 'string') {
+          try { data.organigramma = JSON.parse(data.organigramma) } catch { data.organigramma = [] }
+        }
+        if (!Array.isArray(data.organigramma)) data.organigramma = []
+        setForm(data)
       }
-      if (!Array.isArray(data.organigramma)) data.organigramma = []
-      setForm(data)
+      setMembers(membersRes.data || [])
+    } catch (err) {
+      console.error('Settings fetch error:', err)
+    } finally {
+      setLoading(false)
     }
-    setMembers(membersRes.data || [])
-    setLoading(false)
   }
 
   function set(field, value) {
@@ -75,7 +80,7 @@ export default function SettingsAssociation() {
       .from('association_settings')
       .select('id')
       .limit(1)
-      .single()
+      .maybeSingle()
 
     if (existing?.id) {
       await supabase.from('association_settings').update(payload).eq('id', existing.id)

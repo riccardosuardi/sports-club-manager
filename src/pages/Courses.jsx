@@ -30,15 +30,20 @@ export default function Courses() {
 
   async function fetchData() {
     setLoading(true)
-    const [coursesRes, enrollRes, membersRes] = await Promise.all([
-      supabase.from('courses').select('*').order('name'),
-      supabase.from('enrollments').select('*, member:member_id(first_name, last_name), course:course_id(name)'),
-      supabase.from('users').select('id, first_name, last_name').eq('is_member', true).eq('status', 'attivo').order('last_name'),
-    ])
-    setCourses(coursesRes.data || [])
-    setEnrollments(enrollRes.data || [])
-    setMembers(membersRes.data || [])
-    setLoading(false)
+    try {
+      const [coursesRes, enrollRes, membersRes] = await Promise.all([
+        supabase.from('courses').select('*').order('name'),
+        supabase.from('enrollments').select('*, member:member_id(first_name, last_name), course:course_id(name)'),
+        supabase.from('users').select('id, first_name, last_name').eq('is_member', true).eq('status', 'attivo').order('last_name'),
+      ])
+      setCourses(coursesRes.data || [])
+      setEnrollments(enrollRes.data || [])
+      setMembers(membersRes.data || [])
+    } catch (err) {
+      console.error('Courses fetch error:', err)
+    } finally {
+      setLoading(false)
+    }
   }
 
   async function handleDelete(id) {
