@@ -121,7 +121,6 @@ export default function MemberForm({ member, members = [], onSaved, onCancel }) 
             <option value="">-- Seleziona --</option>
             <option value="giovane">Giovane</option>
             <option value="adulto">Adulto</option>
-            <option value="genitore">Genitore</option>
           </select>
         </div>
         <div>

@@ -15,7 +15,6 @@ const IMPORT_CONTACT_COLUMNS = [
   { header: 'Email', field: 'email' },
   { header: 'Telefono', field: 'phone' },
   { header: 'Fonte', field: 'source' },
-  { header: 'Interesse', field: 'interest' },
   { header: 'Stato', field: 'contact_status' },
   { header: 'Note', field: 'notes' },
 ]
@@ -23,7 +22,6 @@ const IMPORT_CONTACT_COLUMNS = [
 const MEMBER_TYPES = [
   { value: 'giovane', label: 'Giovane' },
   { value: 'adulto', label: 'Adulto' },
-  { value: 'genitore', label: 'Genitore' },
 ]
 const SOURCES = ['Sito web', 'Passaparola', 'Evento', 'Social', 'Volantino', 'Altro']
 const STATUSES = ['tutti', 'nuovo', 'contattato', 'interessato', 'convertito', 'perso']
@@ -122,7 +120,7 @@ export default function Marketing() {
     try {
       const { data, error } = await supabase
         .from('users')
-        .select('id, first_name, last_name, email, phone, source, interest, contact_status, notes, last_contacted_at, created_at, parent_id, preferred_contact_method, member_type, date_of_birth, parent:parent_id(id, first_name, last_name, email, phone, preferred_contact_method)')
+        .select('id, first_name, last_name, email, phone, source, contact_status, notes, last_contacted_at, created_at, parent_id, preferred_contact_method, member_type, date_of_birth, parent:parent_id(id, first_name, last_name, email, phone, preferred_contact_method)')
         .eq('is_member', false)
         .order('created_at', { ascending: false })
       if (error) console.error('Marketing query error:', error)
@@ -395,7 +393,7 @@ export default function Marketing() {
       return (cA - cB) * dir
     }
     if (sortBy === 'type') {
-      const order = { giovane: 1, adulto: 2, genitore: 3 }
+      const order = { giovane: 1, adulto: 2 }
       const tA = order[a.member_type] || 99
       const tB = order[b.member_type] || 99
       return (tA - tB) * dir
@@ -786,7 +784,6 @@ export default function Marketing() {
                       {SOURCES.map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
                   </td>
-                  <td className="hidden whitespace-nowrap px-4 py-3 text-sm text-gray-600 lg:table-cell">{contact.interest || '-'}</td>
                   <td className="hidden whitespace-nowrap px-4 py-3 text-sm lg:table-cell">
                     <select
                       value={contact.member_type || ''}
@@ -921,16 +918,13 @@ function KanbanCard({ contact, onEdit, onDelete, onConvert, onDragStart, onDragE
         </p>
       )}
       <div className="mt-1.5 flex flex-wrap gap-1">
-        {contact.interest && (
-          <span className="inline-block rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">{contact.interest}</span>
-        )}
         {contact.member_type && (
           <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
             contact.member_type === 'giovane' ? 'bg-blue-100 text-blue-700' :
             contact.member_type === 'adulto' ? 'bg-green-100 text-green-700' :
             'bg-purple-100 text-purple-700'
           }`}>
-            {contact.member_type === 'giovane' ? 'Giovane' : contact.member_type === 'adulto' ? 'Adulto' : 'Genitore'}
+            {contact.member_type === 'giovane' ? 'Giovane' : 'Adulto'}
           </span>
         )}
       </div>
@@ -1090,11 +1084,8 @@ function ParentChildRow({ contact, onEdit, onDelete, onConvert, onStatusChange }
             contact.member_type === 'adulto' ? 'bg-green-100 text-green-700' :
             'bg-purple-100 text-purple-700'
           }`}>
-            {contact.member_type === 'giovane' ? 'Giovane' : contact.member_type === 'adulto' ? 'Adulto' : 'Genitore'}
+            {contact.member_type === 'giovane' ? 'Giovane' : 'Adulto'}
           </span>
-        )}
-        {contact.interest && (
-          <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">{contact.interest}</span>
         )}
         <select
           value={contact.contact_status}
@@ -1218,7 +1209,7 @@ function ParentCell({ contact, contacts, onAssign }) {
                 c.member_type === 'adulto' ? 'bg-green-100 text-green-700' :
                 'bg-purple-100 text-purple-700'
               }`}>
-                {c.member_type === 'giovane' ? 'Giovane' : c.member_type === 'adulto' ? 'Adulto' : 'Genitore'}
+                {c.member_type === 'giovane' ? 'Giovane' : 'Adulto'}
               </span>
             )}
           </button>
@@ -1264,7 +1255,6 @@ function ContactForm({ contact, contacts = [], onSaved, onCancel }) {
     email: contact?.email || '',
     phone: contact?.phone || '',
     source: contact?.source || '',
-    interest: contact?.interest || '',
     contact_status: contact?.contact_status || 'nuovo',
     notes: contact?.notes || '',
     parent_id: contact?.parent_id || '',
@@ -1349,10 +1339,6 @@ function ContactForm({ contact, contacts = [], onSaved, onCancel }) {
           </select>
         </div>
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Interesse / Sport</label>
-          <input type="text" value={form.interest || ''} onChange={(e) => set('interest', e.target.value)} placeholder="Es. Nuoto, Calcio..." className={inputClass} />
-        </div>
-        <div>
           <label className="mb-1 block text-sm font-medium text-gray-700">Stato</label>
           <select value={form.contact_status} onChange={(e) => set('contact_status', e.target.value)} className={inputClass}>
             <option value="nuovo">Nuovo</option>
@@ -1432,7 +1418,6 @@ function ImportContattiModal({ onDone, onCancel }) {
       colMap['nome'] = 'first_name'
       colMap['telefono'] = 'phone'
       colMap['fonte'] = 'source'
-      colMap['interesse'] = 'interest'
       colMap['stato'] = 'contact_status'
       colMap['note'] = 'notes'
 
