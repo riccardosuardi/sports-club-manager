@@ -87,7 +87,6 @@ export default function Marketing() {
   const [contacts, setContacts] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [filterStatus, setFilterStatus] = useState('tutti')
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
@@ -99,7 +98,7 @@ export default function Marketing() {
   const [draggedContact, setDraggedContact] = useState(null)
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false)
-  const [filterType, setFilterType] = useState('tutti')
+  const [filterTypes, setFilterTypes] = useState(new Set()) // empty = show all
   const [sortBy, setSortBy] = useState(null) // 'name' | 'contacts' | 'type'
   const [sortDir, setSortDir] = useState('asc')
 
@@ -245,9 +244,8 @@ export default function Marketing() {
       `${c.first_name} ${c.last_name}`.toLowerCase().includes(search.toLowerCase()) ||
       (c.email || '').toLowerCase().includes(search.toLowerCase()) ||
       (c.parent ? `${c.parent.first_name} ${c.parent.last_name}`.toLowerCase().includes(search.toLowerCase()) : false)
-    const matchesStatus = filterStatus === 'tutti' || c.contact_status === filterStatus
-    const matchesType = filterType === 'tutti' || (c.member_type || '') === filterType
-    return matchesSearch && matchesStatus && matchesType
+    const matchesType = filterTypes.size === 0 || filterTypes.has(c.member_type || '')
+    return matchesSearch && matchesType
   }).sort((a, b) => {
     if (!sortBy) return 0
     const dir = sortDir === 'asc' ? 1 : -1
@@ -370,29 +368,27 @@ export default function Marketing() {
             <SearchInput value={search} onChange={setSearch} placeholder="Cerca contatti..." />
           </div>
           {viewMode === 'list' && (
-            <div className="flex flex-wrap gap-2">
-              {STATUSES.map((s) => (
-                <button
-                  key={s}
-                  onClick={() => setFilterStatus(s)}
-                  className={`rounded-lg px-3 py-2 text-sm font-medium capitalize ${
-                    filterStatus === s ? 'bg-primary-100 text-primary-700' : 'text-gray-500 hover:bg-gray-100'
-                  }`}
-                >
-                  {s}
-                </button>
-              ))}
-              <div className="w-px bg-gray-200" />
-              {[{ value: 'tutti', label: 'Tutte' }, ...MEMBER_TYPES].map((t) => (
-                <button
-                  key={t.value}
-                  onClick={() => setFilterType(t.value)}
-                  className={`rounded-lg px-3 py-2 text-sm font-medium ${
-                    filterType === t.value ? 'bg-primary-100 text-primary-700' : 'text-gray-500 hover:bg-gray-100'
-                  }`}
-                >
-                  {t.label || t.value}
-                </button>
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-gray-500">Tipologia:</span>
+              {[...MEMBER_TYPES, { value: '', label: 'Non assegnata' }].map((t) => (
+                <label key={t.value} className="flex items-center gap-1.5 cursor-pointer text-sm">
+                  <input
+                    type="checkbox"
+                    checked={filterTypes.has(t.value)}
+                    onChange={() => {
+                      setFilterTypes(prev => {
+                        const next = new Set(prev)
+                        if (next.has(t.value)) next.delete(t.value)
+                        else next.add(t.value)
+                        return next
+                      })
+                    }}
+                    className="h-3.5 w-3.5 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                  />
+                  <span className={filterTypes.has(t.value) ? 'font-medium text-gray-900' : 'text-gray-500'}>
+                    {t.label}
+                  </span>
+                </label>
               ))}
             </div>
           )}
