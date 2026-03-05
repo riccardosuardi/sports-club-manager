@@ -18,6 +18,16 @@ export default function Dashboard() {
 
   useEffect(() => { fetchDashboard() }, [])
 
+  // Query sicura: non lancia mai eccezioni, ritorna { data: [] } in caso di errore
+  async function safeQuery(queryPromise) {
+    try {
+      const result = await queryPromise
+      return { data: result.data || [], error: result.error }
+    } catch {
+      return { data: [], error: 'query failed' }
+    }
+  }
+
   async function fetchDashboard() {
     setLoading(true)
     const today = new Date()
@@ -25,70 +35,64 @@ export default function Dashboard() {
     const todayMonth = String(today.getMonth() + 1).padStart(2, '0')
     const todayDay = String(today.getDate()).padStart(2, '0')
 
-    try {
-      const [
-        membersRes,
-        recentMembersRes,
-        expiringCertsRes,
-        birthdayRes,
-        coursesRes,
-        enrollmentsRes,
-        contactsRes,
-        ordersRes,
-        competitionsRes,
-      ] = await Promise.all([
-        supabase.from('users').select('id, status, is_minor, medical_certificate_expiry').eq('is_member', true),
-        supabase.from('users').select('id, first_name, last_name, email, status, created_at').eq('is_member', true).order('created_at', { ascending: false }).limit(5),
-        supabase.from('users').select('id, first_name, last_name, medical_certificate_expiry').eq('is_member', true).not('medical_certificate_expiry', 'is', null).lte('medical_certificate_expiry', new Date(today.getTime() + 30 * 86400000).toISOString().split('T')[0]).order('medical_certificate_expiry').limit(10),
-        supabase.from('users').select('id, first_name, last_name, date_of_birth').eq('is_member', true).not('date_of_birth', 'is', null),
-        supabase.from('courses').select('id, is_active'),
-        supabase.from('enrollments').select('id, status'),
-        supabase.from('users').select('id, contact_status').eq('is_member', false),
-        supabase.from('clothing_orders').select('*, member:member_id(first_name, last_name), item:item_id(name)').in('status', ['richiesto', 'ordinato']).order('ordered_at', { ascending: false }).limit(5),
-        supabase.from('competitions').select('id, name, competition_date, status, location, city, sport').gte('competition_date', todayStr).order('competition_date').limit(5),
-      ])
+    // Ogni query e' indipendente e non puo' bloccare le altre
+    const [
+      membersRes,
+      recentMembersRes,
+      expiringCertsRes,
+      birthdayRes,
+      coursesRes,
+      enrollmentsRes,
+      contactsRes,
+      ordersRes,
+      competitionsRes,
+    ] = await Promise.all([
+      safeQuery(supabase.from('users').select('id, status, is_minor, medical_certificate_expiry').eq('is_member', true)),
+      safeQuery(supabase.from('users').select('id, first_name, last_name, email, status, created_at').eq('is_member', true).order('created_at', { ascending: false }).limit(5)),
+      safeQuery(supabase.from('users').select('id, first_name, last_name, medical_certificate_expiry').eq('is_member', true).not('medical_certificate_expiry', 'is', null).lte('medical_certificate_expiry', new Date(today.getTime() + 30 * 86400000).toISOString().split('T')[0]).order('medical_certificate_expiry').limit(10)),
+      safeQuery(supabase.from('users').select('id, first_name, last_name, date_of_birth').eq('is_member', true).not('date_of_birth', 'is', null)),
+      safeQuery(supabase.from('courses').select('id, is_active')),
+      safeQuery(supabase.from('enrollments').select('id, status')),
+      safeQuery(supabase.from('users').select('id, contact_status').eq('is_member', false)),
+      safeQuery(supabase.from('clothing_orders').select('*, member:member_id(first_name, last_name), item:item_id(name)').in('status', ['richiesto', 'ordinato']).order('ordered_at', { ascending: false }).limit(5)),
+      safeQuery(supabase.from('competitions').select('id, name, competition_date, status, location, city, sport').gte('competition_date', todayStr).order('competition_date').limit(5)),
+    ])
 
-      const members = membersRes.data || []
-      const courses = coursesRes.data || []
-      const enrollments = enrollmentsRes.data || []
-      const contacts = contactsRes.data || []
+    const members = membersRes.data
+    const courses = coursesRes.data
+    const enrollments = enrollmentsRes.data
+    const contacts = contactsRes.data
 
-      setStats({
-        totalMembers: members.length,
-        activeMembers: members.filter(m => m.status === 'attivo').length,
-        minors: members.filter(m => m.is_minor).length,
-        activeCourses: courses.filter(c => c.is_active).length,
-        activeEnrollments: enrollments.filter(e => e.status === 'attivo').length,
-        newContacts: contacts.filter(c => c.contact_status === 'nuovo').length,
-        expiredCerts: members.filter(m => isCertificateExpired(m.medical_certificate_expiry)).length,
-        expiringSoon: members.filter(m => isCertificateExpiringSoon(m.medical_certificate_expiry)).length,
-      })
+    setStats({
+      totalMembers: members.length,
+      activeMembers: members.filter(m => m.status === 'attivo').length,
+      minors: members.filter(m => m.is_minor).length,
+      activeCourses: courses.filter(c => c.is_active).length,
+      activeEnrollments: enrollments.filter(e => e.status === 'attivo').length,
+      newContacts: contacts.filter(c => c.contact_status === 'nuovo').length,
+      expiredCerts: members.filter(m => isCertificateExpired(m.medical_certificate_expiry)).length,
+      expiringSoon: members.filter(m => isCertificateExpiringSoon(m.medical_certificate_expiry)).length,
+    })
 
-      setRecentMembers(recentMembersRes.data || [])
+    setRecentMembers(recentMembersRes.data)
 
-      const certData = expiringCertsRes.data || []
-      setExpiringCerts(
-        certData
-          .filter(m => isCertificateExpired(m.medical_certificate_expiry) || isCertificateExpiringSoon(m.medical_certificate_expiry))
-          .slice(0, 5)
-      )
+    setExpiringCerts(
+      expiringCertsRes.data
+        .filter(m => isCertificateExpired(m.medical_certificate_expiry) || isCertificateExpiringSoon(m.medical_certificate_expiry))
+        .slice(0, 5)
+    )
 
-      const allWithDob = birthdayRes.data || []
-      setTodayBirthdays(allWithDob.filter(m => {
-        if (!m.date_of_birth) return false
-        const [, mm, dd] = m.date_of_birth.split('-')
-        return mm === todayMonth && dd === todayDay
-      }))
-      setPendingOrders(ordersRes.data || [])
-      setUpcomingCompetitions(competitionsRes.data || [])
-    } catch (err) {
-      console.error('Dashboard fetch error:', err)
-    } finally {
-      setLoading(false)
-    }
+    setTodayBirthdays(birthdayRes.data.filter(m => {
+      if (!m.date_of_birth) return false
+      const [, mm, dd] = m.date_of_birth.split('-')
+      return mm === todayMonth && dd === todayDay
+    }))
+    setPendingOrders(ordersRes.data)
+    setUpcomingCompetitions(competitionsRes.data)
+    setLoading(false)
   }
 
-  if (loading) return <div className="py-12 text-center text-gray-500">Caricamento dashboard...</div>
+  if (loading || !stats) return <div className="py-12 text-center text-gray-500">Caricamento dashboard...</div>
 
   return (
     <div className="space-y-6">
