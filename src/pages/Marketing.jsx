@@ -219,10 +219,15 @@ export default function Marketing() {
         if (!error) enrolled++
       }
     }
+    // Set contact_status to 'contattato' for all enrolled contacts
+    if (enrolled > 0) {
+      await supabase.from('users').update({ contact_status: 'contattato' }).in('id', ids)
+    }
     setShowBulkEnroll(false)
     setBulkEnrollActivity('')
     setSelectedIds(new Set())
     fetchActivities()
+    fetchContacts()
   }
 
   async function handleDelete(id) {
