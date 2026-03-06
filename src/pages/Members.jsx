@@ -1,6 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Plus, Users, AlertTriangle, Upload, Download, Eye, Pencil, Trash2, X, FileDown, CheckCircle2, AlertCircle } from 'lucide-react'
+import { Plus, Users, AlertTriangle, Upload, Download, Eye, Pencil, Trash2, X, FileDown, CheckCircle2, AlertCircle, Calendar, Shield, Phone, Mail, MapPin, User, Trophy } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { formatDate, isCertificateExpired, isCertificateExpiringSoon, getFullName, calculateAge } from '../lib/utils'
 import Badge from '../components/ui/Badge'
@@ -8,6 +7,7 @@ import SearchInput from '../components/ui/SearchInput'
 import EmptyState from '../components/ui/EmptyState'
 import Modal from '../components/ui/Modal'
 import ConfirmDialog from '../components/ui/ConfirmDialog'
+import Drawer from '../components/ui/Drawer'
 import MemberForm from '../components/members/MemberForm'
 
 const IMPORT_COLUMNS = [
@@ -31,7 +31,6 @@ const IMPORT_COLUMNS = [
 ]
 
 export default function Members() {
-  const navigate = useNavigate()
   const [members, setMembers] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -40,6 +39,8 @@ export default function Members() {
   const [editingMember, setEditingMember] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [showImportModal, setShowImportModal] = useState(false)
+  const [drawerMember, setDrawerMember] = useState(null)
+  const [drawerData, setDrawerData] = useState({ enrollments: [], competitions: [], children: [] })
 
   useEffect(() => {
     fetchMembers()
@@ -59,6 +60,20 @@ export default function Members() {
     } finally {
       setLoading(false)
     }
+  }
+
+  async function openDrawer(member) {
+    setDrawerMember(member)
+    const [enrollRes, compRes, childRes] = await Promise.all([
+      supabase.from('enrollments').select('*, course:course_id(name, sport, schedule)').eq('member_id', member.id),
+      supabase.from('competition_registrations').select('*, competition:competition_id(name, competition_date, location)').eq('member_id', member.id),
+      supabase.from('users').select('id, first_name, last_name, date_of_birth, status').eq('parent_id', member.id),
+    ])
+    setDrawerData({
+      enrollments: enrollRes.data || [],
+      competitions: compRes.data || [],
+      children: childRes.data || [],
+    })
   }
 
   async function handleDelete(id) {
@@ -251,7 +266,7 @@ export default function Members() {
                     <td className="whitespace-nowrap px-4 py-3 text-right">
                       <div className="flex justify-end gap-1">
                         <button
-                          onClick={() => navigate(`/atleti/${member.id}`)}
+                          onClick={() => openDrawer(member)}
                           className="rounded-lg p-1.5 text-primary-600 hover:bg-primary-50"
                           title="Dettagli"
                         >
@@ -319,6 +334,124 @@ export default function Members() {
         confirmLabel="Elimina"
         danger
       />
+
+      {/* Drawer dettaglio */}
+      <Drawer open={!!drawerMember} onClose={() => setDrawerMember(null)} title={drawerMember ? getFullName(drawerMember) : ''} width="max-w-xl">
+        {drawerMember && (
+          <MemberDrawerContent
+            member={drawerMember}
+            enrollments={drawerData.enrollments}
+            competitions={drawerData.competitions}
+            children={drawerData.children}
+            onEdit={() => { setEditingMember(drawerMember); setShowForm(true) }}
+            onOpenChild={(child) => openDrawer(child)}
+          />
+        )}
+      </Drawer>
+    </div>
+  )
+}
+
+function MemberDrawerContent({ member, enrollments, competitions, children: memberChildren, onEdit, onOpenChild }) {
+  const age = calculateAge(member.date_of_birth)
+  const certExpired = isCertificateExpired(member.medical_certificate_expiry)
+  const certExpiring = isCertificateExpiringSoon(member.medical_certificate_expiry)
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm text-gray-500">Tessera: {member.membership_number || 'N/A'}</p>
+          <div className="mt-1 flex gap-2">
+            <Badge status={member.status} />
+            {member.member_type && <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600 capitalize">{member.member_type}</span>}
+          </div>
+        </div>
+        <button onClick={onEdit} className="inline-flex items-center gap-1.5 rounded-lg bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700">
+          <Pencil size={14} /> Modifica
+        </button>
+      </div>
+
+      {/* Info */}
+      <div className="rounded-lg border border-gray-200 p-4">
+        <h4 className="mb-3 text-sm font-semibold text-gray-700">Informazioni</h4>
+        <div className="grid grid-cols-2 gap-3 text-sm">
+          {member.date_of_birth && <div className="flex items-center gap-2"><Calendar size={14} className="text-gray-400" /><span>{formatDate(member.date_of_birth)} ({age} anni)</span></div>}
+          {member.email && <div className="flex items-center gap-2"><Mail size={14} className="text-gray-400" /><span>{member.email}</span></div>}
+          {member.phone && <div className="flex items-center gap-2"><Phone size={14} className="text-gray-400" /><span>{member.phone}</span></div>}
+          {(member.address || member.city) && <div className="flex items-center gap-2 col-span-2"><MapPin size={14} className="text-gray-400" /><span>{[member.address, member.city, member.province].filter(Boolean).join(', ')}</span></div>}
+        </div>
+      </div>
+
+      {/* Certificato Medico */}
+      <div className={`rounded-lg border p-4 ${certExpired ? 'border-red-200 bg-red-50' : certExpiring ? 'border-yellow-200 bg-yellow-50' : 'border-gray-200'}`}>
+        <h4 className="mb-2 flex items-center gap-2 text-sm font-semibold text-gray-700">
+          <Shield size={14} /> Certificato Medico
+        </h4>
+        <p className={`text-sm ${certExpired ? 'text-red-700 font-medium' : certExpiring ? 'text-yellow-700' : 'text-gray-600'}`}>
+          {member.medical_certificate_expiry ? formatDate(member.medical_certificate_expiry) : 'Non inserito'}
+          {certExpired && ' - SCADUTO'}
+          {certExpiring && ' - In scadenza'}
+        </p>
+      </div>
+
+      {/* Figli */}
+      {memberChildren.length > 0 && (
+        <div className="rounded-lg border border-gray-200 p-4">
+          <h4 className="mb-3 text-sm font-semibold text-gray-700">Figli / Minori ({memberChildren.length})</h4>
+          <div className="space-y-2">
+            {memberChildren.map(c => (
+              <button key={c.id} onClick={() => onOpenChild(c)} className="flex w-full items-center justify-between rounded-lg border border-gray-100 p-2 text-left hover:bg-gray-50">
+                <span className="text-sm font-medium">{getFullName(c)}</span>
+                <span className="text-xs text-gray-500">{c.date_of_birth ? `${calculateAge(c.date_of_birth)} anni` : ''}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Corsi */}
+      <div className="rounded-lg border border-gray-200 p-4">
+        <h4 className="mb-3 text-sm font-semibold text-gray-700">Corsi Iscritti ({enrollments.length})</h4>
+        {enrollments.length === 0 ? (
+          <p className="text-sm text-gray-400">Nessuna iscrizione</p>
+        ) : (
+          <div className="space-y-2">
+            {enrollments.map(e => (
+              <div key={e.id} className="flex items-center justify-between rounded-lg border border-gray-100 p-2">
+                <div>
+                  <p className="text-sm font-medium">{e.course?.name}</p>
+                  <p className="text-xs text-gray-500">{e.course?.sport} - {e.course?.schedule}</p>
+                </div>
+                <Badge status={e.status} />
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Gare */}
+      <div className="rounded-lg border border-gray-200 p-4">
+        <h4 className="mb-3 flex items-center gap-2 text-sm font-semibold text-gray-700">
+          <Trophy size={14} /> Gare ({competitions.length})
+        </h4>
+        {competitions.length === 0 ? (
+          <p className="text-sm text-gray-400">Nessuna gara</p>
+        ) : (
+          <div className="space-y-2">
+            {competitions.map(r => (
+              <div key={r.id} className="rounded-lg border border-gray-100 p-2">
+                <p className="text-sm font-medium">{r.competition?.name}</p>
+                <p className="text-xs text-gray-500">
+                  {r.competition?.competition_date ? formatDate(r.competition.competition_date) : ''} - {r.competition?.location || ''}
+                </p>
+                {r.result && <p className="mt-1 text-xs text-primary-600">Risultato: {r.result}</p>}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

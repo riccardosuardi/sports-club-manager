@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Plus, Shirt, Package, Pencil, Trash2, UserPlus, Undo2 } from 'lucide-react'
+import { Plus, Shirt, Package, Pencil, Trash2, UserPlus, Undo2, ImagePlus } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { formatDate, getFullName } from '../lib/utils'
 import Badge from '../components/ui/Badge'
@@ -126,14 +126,24 @@ export default function Clothing() {
               const totalQty = getTotalQuantity(item.id)
               const assignedCount = getAssignedCount(item.id)
               return (
-                <div key={item.id} className="rounded-lg border border-gray-200 bg-white p-5">
-                  <div className="mb-2 flex items-start justify-between">
-                    <div>
-                      <h3 className="font-semibold text-gray-900">{item.name}</h3>
-                      {item.category && <p className="text-xs text-gray-500">{item.category}</p>}
+                <div key={item.id} className="rounded-lg border border-gray-200 bg-white overflow-hidden">
+                  <div className="cursor-pointer" onClick={() => setSelectedItem(item)}>
+                    {item.image_url && (
+                      <div className="h-40 w-full bg-gray-100">
+                        <img src={item.image_url} alt={item.name} className="h-full w-full object-cover" />
+                      </div>
+                    )}
+                    <div className="px-5 pt-5 pb-2">
+                      <div className="mb-2 flex items-start justify-between">
+                        <div className="min-w-0 flex-1">
+                          <h3 className="font-semibold text-gray-900 break-words">{item.name}</h3>
+                          {item.category && <p className="text-xs text-gray-500">{item.category}</p>}
+                        </div>
+                        {item.price && <span className="shrink-0 text-lg font-bold text-gray-900">&euro; {Number(item.price).toFixed(2)}</span>}
+                      </div>
                     </div>
-                    {item.price && <span className="text-lg font-bold text-gray-900">&euro; {Number(item.price).toFixed(2)}</span>}
                   </div>
+                  <div className="px-5 pb-5">
                   {item.description && <p className="mb-3 text-sm text-gray-600">{item.description}</p>}
 
                   {/* Taglie con quantit\u00e0 */}
@@ -172,7 +182,6 @@ export default function Clothing() {
                       >
                         <UserPlus size={16} />
                       </button>
-                      <button onClick={() => setSelectedItem(item)} className="text-xs text-primary-600 hover:text-primary-700 px-2 py-1">Dettagli</button>
                       <button onClick={() => { setEditingItem(item); setShowItemForm(true) }} className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100" title="Modifica">
                         <Pencil size={16} />
                       </button>
@@ -180,6 +189,7 @@ export default function Clothing() {
                         <Trash2 size={16} />
                       </button>
                     </div>
+                  </div>
                   </div>
                 </div>
               )
@@ -308,6 +318,8 @@ function ClothingItemForm({ item, inventory, onSaved, onCancel }) {
     price: item?.price || '',
     is_available: item?.is_available ?? true,
   })
+  const [imageFile, setImageFile] = useState(null)
+  const [imagePreview, setImagePreview] = useState(item?.image_url || null)
 
   // Inventory quantities per size
   const [sizeQuantities, setSizeQuantities] = useState(() => {
@@ -326,11 +338,35 @@ function ClothingItemForm({ item, inventory, onSaved, onCancel }) {
 
   function set(field, value) { setForm(prev => ({ ...prev, [field]: value })) }
 
+  function handleImageChange(e) {
+    const file = e.target.files?.[0]
+    if (file) {
+      setImageFile(file)
+      setImagePreview(URL.createObjectURL(file))
+    }
+  }
+
   const parsedSizes = form.available_sizes ? form.available_sizes.split(',').map(s => s.trim()).filter(Boolean) : []
 
   async function handleSubmit(e) {
     e.preventDefault()
     setSaving(true)
+
+    let imageUrl = item?.image_url || null
+    // Upload image if selected
+    if (imageFile) {
+      const ext = imageFile.name.split('.').pop()
+      const filePath = `clothing/${Date.now()}.${ext}`
+      const { error: uploadErr } = await supabase.storage.from('images').upload(filePath, imageFile)
+      if (uploadErr) {
+        setError('Errore upload immagine: ' + uploadErr.message)
+        setSaving(false)
+        return
+      }
+      const { data: urlData } = supabase.storage.from('images').getPublicUrl(filePath)
+      imageUrl = urlData.publicUrl
+    }
+
     const payload = {
       name: form.name,
       description: form.description || null,
@@ -338,6 +374,7 @@ function ClothingItemForm({ item, inventory, onSaved, onCancel }) {
       available_sizes: parsedSizes,
       price: form.price ? parseFloat(form.price) : null,
       is_available: form.is_available,
+      image_url: imageUrl,
     }
     try {
       let itemId = item?.id
@@ -353,11 +390,30 @@ function ClothingItemForm({ item, inventory, onSaved, onCancel }) {
       // Update inventory for each size
       for (const size of parsedSizes) {
         const qty = parseInt(sizeQuantities[size]) || 0
-        const { error } = await supabase.from('clothing_inventory').upsert(
+        // Try upsert, fallback to manual update/insert
+        const { error: upsertErr } = await supabase.from('clothing_inventory').upsert(
           { item_id: itemId, size, quantity: qty },
           { onConflict: 'item_id,size' }
         )
-        if (error) console.error('Inventory update error:', error)
+        if (upsertErr) {
+          const { data: existing } = await supabase.from('clothing_inventory')
+            .select('id').eq('item_id', itemId).eq('size', size).maybeSingle()
+          if (existing) {
+            const { error: e } = await supabase.from('clothing_inventory').update({ quantity: qty }).eq('id', existing.id)
+            if (e) throw e
+          } else {
+            const { error: e } = await supabase.from('clothing_inventory').insert({ item_id: itemId, size, quantity: qty })
+            if (e) throw e
+          }
+        }
+      }
+
+      // Remove inventory for sizes no longer listed
+      const { data: allInv } = await supabase.from('clothing_inventory').select('id, size').eq('item_id', itemId)
+      if (allInv) {
+        for (const inv of allInv.filter(i => !parsedSizes.includes(i.size))) {
+          await supabase.from('clothing_inventory').delete().eq('id', inv.id)
+        }
       }
 
       onSaved()
@@ -370,6 +426,25 @@ function ClothingItemForm({ item, inventory, onSaved, onCancel }) {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       {error && <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</div>}
+      {/* Image upload */}
+      <div>
+        <label className="mb-1 block text-sm font-medium text-gray-700">Immagine</label>
+        <div className="flex items-center gap-4">
+          {imagePreview ? (
+            <img src={imagePreview} alt="Preview" className="h-20 w-20 rounded-lg object-cover border border-gray-200" />
+          ) : (
+            <div className="flex h-20 w-20 items-center justify-center rounded-lg border-2 border-dashed border-gray-300 bg-gray-50">
+              <ImagePlus size={24} className="text-gray-400" />
+            </div>
+          )}
+          <div>
+            <label className="cursor-pointer rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
+              Carica immagine
+              <input type="file" accept="image/*" onChange={handleImageChange} className="hidden" />
+            </label>
+          </div>
+        </div>
+      </div>
       <div>
         <label className="mb-1 block text-sm font-medium text-gray-700">Nome *</label>
         <input type="text" value={form.name} onChange={(e) => set('name', e.target.value)} required className={inputClass} />

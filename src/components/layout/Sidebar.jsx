@@ -11,6 +11,7 @@ import {
   Trophy,
   Calendar,
   Shapes,
+  UserRoundPlus,
   X,
   ChevronDown,
   ChevronLeft,
@@ -21,10 +22,12 @@ import {
   Building2,
 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
+import { useAssociation } from '../../context/AssociationContext'
 
 const navigation = [
   { name: 'Dashboard', to: '/', icon: LayoutDashboard },
   { name: 'Atleti', to: '/atleti', icon: Users },
+  { name: 'Ospiti', to: '/ospiti', icon: UserRoundPlus },
   { name: 'Gare', to: '/gare', icon: Calendar },
   { name: 'Attività', to: '/attivita', icon: GraduationCap },
   { name: 'Abbigliamento', to: '/abbigliamento', icon: Shirt },
@@ -43,15 +46,15 @@ const navigation = [
     roles: ['admin', 'segreteria'],
     children: [
       { name: 'Contatti', to: '/marketing/contatti', icon: Contact },
+      { name: 'Attività', to: '/marketing/attivita', icon: GraduationCap },
     ],
   },
   {
     name: 'Impostazioni',
     icon: Settings,
-    roles: ['admin'],
     children: [
       { name: 'Utente', to: '/impostazioni/utente', icon: User },
-      { name: 'Associazione', to: '/impostazioni/associazione', icon: Building2 },
+      { name: 'Associazione', to: '/impostazioni/associazione', icon: Building2, roles: ['admin'] },
     ],
   },
 ]
@@ -88,11 +91,19 @@ function Tooltip({ label, children }) {
 
 export default function Sidebar({ open, onClose, collapsed, onToggleCollapse }) {
   const { hasRole, profile, signOut } = useAuth()
+  const { settings: assocSettings } = useAssociation()
   const location = useLocation()
 
-  const filteredNav = navigation.filter(
-    (item) => !item.roles || item.roles.some((r) => hasRole(r))
-  )
+  const filteredNav = navigation
+    .filter((item) => !item.roles || item.roles.some((r) => hasRole(r)))
+    .map((item) => {
+      if (item.children) {
+        const filteredChildren = item.children.filter((c) => !c.roles || c.roles.some((r) => hasRole(r)))
+        return { ...item, children: filteredChildren }
+      }
+      return item
+    })
+    .filter((item) => !item.children || item.children.length > 0)
 
   const [expanded, setExpanded] = useState(() => {
     const initial = {}
@@ -148,18 +159,31 @@ export default function Sidebar({ open, onClose, collapsed, onToggleCollapse }) 
         } ${collapsed ? 'w-16' : 'w-64'}`}
       >
         {/* Logo */}
-        <div className="flex h-14 items-center justify-between border-b border-gray-200 px-4">
-          {collapsed ? (
-            <Trophy className="mx-auto text-primary-600" size={24} />
-          ) : (
-            <div className="flex items-center gap-2">
-              <Trophy className="text-primary-600" size={24} />
-              <span className="text-lg font-bold text-gray-900">SportClub</span>
-            </div>
+        <div className="flex flex-col border-b border-gray-200">
+          <div className="flex h-14 items-center justify-between px-4">
+            {collapsed ? (
+              assocSettings?.logo_url ? (
+                <img src={assocSettings.logo_url} alt="" className="mx-auto h-8 w-8 rounded-lg object-cover" />
+              ) : (
+                <Trophy className="mx-auto text-primary-600" size={24} />
+              )
+            ) : (
+              <div className="flex items-center gap-2 min-w-0">
+                {assocSettings?.logo_url ? (
+                  <img src={assocSettings.logo_url} alt="" className="h-8 w-8 shrink-0 rounded-lg object-cover" />
+                ) : (
+                  <Trophy className="shrink-0 text-primary-600" size={24} />
+                )}
+                <span className="text-lg font-bold text-gray-900 truncate">{assocSettings?.name || 'SportClub'}</span>
+              </div>
+            )}
+            <button onClick={onClose} className="rounded-md p-1 text-gray-400 hover:bg-gray-100 lg:hidden">
+              <X size={20} />
+            </button>
+          </div>
+          {!collapsed && (
+            <div className="px-4 pb-2 text-xs text-gray-400">v0.3.0-beta</div>
           )}
-          <button onClick={onClose} className="rounded-md p-1 text-gray-400 hover:bg-gray-100 lg:hidden">
-            <X size={20} />
-          </button>
         </div>
 
         {/* Navigation */}

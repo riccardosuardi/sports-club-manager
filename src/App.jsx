@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
+import { AssociationProvider } from './context/AssociationContext'
 import Layout from './components/layout/Layout'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
@@ -9,8 +10,10 @@ import Courses from './pages/Courses'
 import Clothing from './pages/Clothing'
 import Competitions from './pages/Competitions'
 import Marketing from './pages/Marketing'
+import MarketingActivities from './pages/MarketingActivities'
 import SettingsUser from './pages/SettingsUser'
 import SettingsAssociation from './pages/SettingsAssociation'
+import Guests from './pages/Guests'
 import YouthAthletes from './pages/YouthAthletes'
 import YouthParents from './pages/YouthParents'
 import YouthCourses from './pages/YouthCourses'
@@ -59,6 +62,7 @@ function AppRoutes() {
         <Route path="/" element={<Dashboard />} />
         <Route path="/atleti" element={<Members />} />
         <Route path="/atleti/:id" element={<MemberDetail />} />
+        <Route path="/ospiti" element={<Guests />} />
         <Route path="/gare" element={<Competitions />} />
         <Route path="/attivita" element={<Courses />} />
         <Route path="/abbigliamento" element={<Clothing />} />
@@ -77,15 +81,19 @@ function AppRoutes() {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="/marketing/attivita"
+          element={
+            <ProtectedRoute roles={['admin', 'segreteria']}>
+              <MarketingActivities />
+            </ProtectedRoute>
+          }
+        />
 
         {/* Impostazioni */}
         <Route
           path="/impostazioni/utente"
-          element={
-            <ProtectedRoute roles={['admin']}>
-              <SettingsUser />
-            </ProtectedRoute>
-          }
+          element={<SettingsUser />}
         />
         <Route
           path="/impostazioni/associazione"
@@ -105,7 +113,9 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <AppRoutes />
+        <AssociationProvider>
+          <AppRoutes />
+        </AssociationProvider>
       </AuthProvider>
     </BrowserRouter>
   )
