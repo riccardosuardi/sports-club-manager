@@ -90,11 +90,7 @@ function AppRoutes() {
         {/* Impostazioni */}
         <Route
           path="/impostazioni/utente"
-          element={
-            <ProtectedRoute roles={['admin']}>
-              <SettingsUser />
-            </ProtectedRoute>
-          }
+          element={<SettingsUser />}
         />
         <Route
           path="/impostazioni/associazione"

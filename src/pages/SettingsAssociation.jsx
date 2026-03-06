@@ -1,5 +1,5 @@
-import { useEffect, useState, useRef } from 'react'
-import { Building2, Save, Plus, Trash2, Search } from 'lucide-react'
+import { useEffect, useState, useRef, useCallback } from 'react'
+import { Building2, Save, Plus, Trash2, Search, GripVertical, X, Link2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { getFullName } from '../lib/utils'
 
@@ -19,7 +19,7 @@ const DEFAULT_SETTINGS = {
   founded_year: '',
   sport_type: '',
   notes: '',
-  organigramma: [],
+  organigramma: { nodes: [], connections: [] },
 }
 
 const TABS = [
@@ -27,6 +27,29 @@ const TABS = [
   { id: 'contatti', label: 'Contatti' },
   { id: 'organigramma', label: 'Organigramma' },
 ]
+
+function migrateOrgData(data) {
+  if (!data) return { nodes: [], connections: [] }
+  if (data.nodes) return data
+  // Migrate from old array format
+  if (Array.isArray(data)) {
+    const nodes = []
+    const connections = []
+    data.forEach((item, idx) => {
+      const parentId = `node-${Date.now()}-${idx}`
+      nodes.push({ id: parentId, role: item.role || '', member_id: item.member_id || '', x: 200 + idx * 250, y: 60 })
+      if (item.children) {
+        item.children.forEach((child, cIdx) => {
+          const childId = `node-${Date.now()}-${idx}-${cIdx}`
+          nodes.push({ id: childId, role: child.role || '', member_id: child.member_id || '', x: 100 + idx * 250 + cIdx * 200, y: 200 })
+          connections.push({ from: parentId, to: childId })
+        })
+      }
+    })
+    return { nodes, connections }
+  }
+  return { nodes: [], connections: [] }
+}
 
 export default function SettingsAssociation() {
   const [form, setForm] = useState(DEFAULT_SETTINGS)
@@ -48,9 +71,9 @@ export default function SettingsAssociation() {
       if (settingsRes.data) {
         const data = { ...DEFAULT_SETTINGS, ...settingsRes.data }
         if (typeof data.organigramma === 'string') {
-          try { data.organigramma = JSON.parse(data.organigramma) } catch { data.organigramma = [] }
+          try { data.organigramma = JSON.parse(data.organigramma) } catch { data.organigramma = { nodes: [], connections: [] } }
         }
-        if (!Array.isArray(data.organigramma)) data.organigramma = []
+        data.organigramma = migrateOrgData(data.organigramma)
         setForm(data)
       }
       setMembers(membersRes.data || [])
@@ -74,7 +97,7 @@ export default function SettingsAssociation() {
     delete payload.id
     delete payload.created_at
     delete payload.updated_at
-    payload.organigramma = JSON.stringify(payload.organigramma || [])
+    payload.organigramma = JSON.stringify(payload.organigramma || { nodes: [], connections: [] })
 
     const { data: existing } = await supabase
       .from('association_settings')
@@ -91,46 +114,6 @@ export default function SettingsAssociation() {
     setSaving(false)
     setSaved(true)
     setTimeout(() => setSaved(false), 3000)
-  }
-
-  // Organigramma helpers
-  function addOrgRole() {
-    set('organigramma', [...(form.organigramma || []), { role: '', member_id: '', children: [] }])
-  }
-
-  function updateOrgItem(index, field, value) {
-    const updated = [...(form.organigramma || [])]
-    updated[index] = { ...updated[index], [field]: value }
-    set('organigramma', updated)
-  }
-
-  function removeOrgItem(index) {
-    const updated = (form.organigramma || []).filter((_, i) => i !== index)
-    set('organigramma', updated)
-  }
-
-  function addOrgChild(parentIndex) {
-    const updated = [...(form.organigramma || [])]
-    if (!updated[parentIndex].children) updated[parentIndex].children = []
-    updated[parentIndex].children.push({ role: '', member_id: '' })
-    set('organigramma', updated)
-  }
-
-  function updateOrgChild(parentIndex, childIndex, field, value) {
-    const updated = [...(form.organigramma || [])]
-    updated[parentIndex].children[childIndex] = { ...updated[parentIndex].children[childIndex], [field]: value }
-    set('organigramma', updated)
-  }
-
-  function removeOrgChild(parentIndex, childIndex) {
-    const updated = [...(form.organigramma || [])]
-    updated[parentIndex].children = updated[parentIndex].children.filter((_, i) => i !== childIndex)
-    set('organigramma', updated)
-  }
-
-  function getMemberName(memberId) {
-    const m = members.find(m => m.id === memberId)
-    return m ? getFullName(m) : ''
   }
 
   const inputClass = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500 focus:outline-none'
@@ -214,7 +197,7 @@ export default function SettingsAssociation() {
                 />
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">Citt&agrave;</label>
+                <label className="mb-1 block text-sm font-medium text-gray-700">Città</label>
                 <input type="text" value={form.city} onChange={(e) => set('city', e.target.value)} className={inputClass} />
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -247,158 +230,13 @@ export default function SettingsAssociation() {
           </div>
         )}
 
-        {/* Organigramma - Visual Chart */}
+        {/* Organigramma - Canvas Drag & Drop */}
         {activeTab === 'organigramma' && (
-          <div className="rounded-lg border border-gray-200 bg-white p-6">
-            <div className="mb-6 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-gray-900">Organigramma</h3>
-              <button
-                type="button"
-                onClick={addOrgRole}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-primary-600 px-3 py-2 text-sm font-medium text-white hover:bg-primary-700"
-              >
-                <Plus size={16} /> Aggiungi Ruolo
-              </button>
-            </div>
-
-            {(!form.organigramma || form.organigramma.length === 0) ? (
-              <div className="rounded-lg border-2 border-dashed border-gray-200 p-12 text-center">
-                <p className="text-sm text-gray-500">Nessun ruolo definito. Aggiungi ruoli per creare l'organigramma.</p>
-              </div>
-            ) : (
-              <div className="space-y-8">
-                {/* Visual org chart */}
-                <div className="overflow-x-auto pb-4">
-                  <div className="flex flex-col items-center gap-6 min-w-fit">
-                    {form.organigramma.map((item, idx) => (
-                      <div key={idx} className="flex flex-col items-center">
-                        {/* Parent node */}
-                        <div className="relative group">
-                          <div className="min-w-48 rounded-xl border-2 border-primary-200 bg-primary-50 px-5 py-3 text-center shadow-sm">
-                            <p className="text-xs font-semibold uppercase tracking-wide text-primary-600">{item.role || 'Ruolo...'}</p>
-                            <p className="mt-1 text-sm font-medium text-gray-900">
-                              {item.member_id ? getMemberName(item.member_id) : <span className="italic text-gray-400">Non assegnato</span>}
-                            </p>
-                          </div>
-                        </div>
-                        {/* Connector line */}
-                        {item.children && item.children.length > 0 && (
-                          <>
-                            <div className="h-6 w-px bg-gray-300" />
-                            <div className="flex gap-4">
-                              {item.children.map((child, cIdx) => (
-                                <div key={cIdx} className="flex flex-col items-center">
-                                  <div className="h-4 w-px bg-gray-300" />
-                                  <div className="min-w-40 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-center shadow-sm">
-                                    <p className="text-xs font-medium uppercase tracking-wide text-gray-500">{child.role || 'Sotto-ruolo...'}</p>
-                                    <p className="mt-0.5 text-sm text-gray-800">
-                                      {child.member_id ? getMemberName(child.member_id) : <span className="italic text-gray-400">Non assegnato</span>}
-                                    </p>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Edit form below chart */}
-                <div className="border-t pt-6">
-                  <h4 className="mb-4 text-sm font-semibold text-gray-700">Modifica ruoli</h4>
-                  <div className="space-y-4">
-                    {form.organigramma.map((item, idx) => (
-                      <div key={idx} className="rounded-lg border border-gray-200 bg-gray-50 p-4">
-                        <div className="flex gap-3">
-                          <div className="flex-1">
-                            <label className="mb-1 block text-xs font-medium text-gray-500">Ruolo</label>
-                            <input
-                              type="text"
-                              value={item.role || ''}
-                              onChange={(e) => updateOrgItem(idx, 'role', e.target.value)}
-                              placeholder="Es. Presidente, Vicepresidente, Allenatore..."
-                              className={inputClass}
-                            />
-                          </div>
-                          <div className="flex-1">
-                            <label className="mb-1 block text-xs font-medium text-gray-500">Persona</label>
-                            <select
-                              value={item.member_id || ''}
-                              onChange={(e) => updateOrgItem(idx, 'member_id', e.target.value)}
-                              className={inputClass}
-                            >
-                              <option value="">Seleziona persona...</option>
-                              {members.map(m => (
-                                <option key={m.id} value={m.id}>{m.last_name} {m.first_name}</option>
-                              ))}
-                            </select>
-                          </div>
-                          <div className="flex items-end gap-1">
-                            <button
-                              type="button"
-                              onClick={() => addOrgChild(idx)}
-                              className="rounded-lg p-2 text-primary-600 hover:bg-primary-50"
-                              title="Aggiungi sotto-ruolo"
-                            >
-                              <Plus size={16} />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => removeOrgItem(idx)}
-                              className="rounded-lg p-2 text-red-500 hover:bg-red-50"
-                              title="Rimuovi"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </div>
-                        </div>
-
-                        {item.children && item.children.length > 0 && (
-                          <div className="ml-6 mt-3 space-y-2 border-l-2 border-primary-200 pl-4">
-                            {item.children.map((child, cIdx) => (
-                              <div key={cIdx} className="flex gap-3">
-                                <div className="flex-1">
-                                  <input
-                                    type="text"
-                                    value={child.role || ''}
-                                    onChange={(e) => updateOrgChild(idx, cIdx, 'role', e.target.value)}
-                                    placeholder="Sotto-ruolo..."
-                                    className={inputClass}
-                                  />
-                                </div>
-                                <div className="flex-1">
-                                  <select
-                                    value={child.member_id || ''}
-                                    onChange={(e) => updateOrgChild(idx, cIdx, 'member_id', e.target.value)}
-                                    className={inputClass}
-                                  >
-                                    <option value="">Seleziona persona...</option>
-                                    {members.map(m => (
-                                      <option key={m.id} value={m.id}>{m.last_name} {m.first_name}</option>
-                                    ))}
-                                  </select>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() => removeOrgChild(idx, cIdx)}
-                                  className="rounded-lg p-2 text-red-500 hover:bg-red-50"
-                                  title="Rimuovi"
-                                >
-                                  <Trash2 size={16} />
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
+          <OrgChart
+            data={form.organigramma}
+            onChange={(d) => set('organigramma', d)}
+            members={members}
+          />
         )}
 
         {/* Salva */}
@@ -414,6 +252,309 @@ export default function SettingsAssociation() {
           {saved && <span className="text-sm text-green-600">Salvato con successo!</span>}
         </div>
       </form>
+    </div>
+  )
+}
+
+const NODE_W = 180
+const NODE_H = 70
+
+function OrgChart({ data, onChange, members }) {
+  const canvasRef = useRef(null)
+  const [dragging, setDragging] = useState(null)
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
+  const [editNode, setEditNode] = useState(null)
+  const [connecting, setConnecting] = useState(null)
+  const [connectMouse, setConnectMouse] = useState(null)
+
+  const nodes = data?.nodes || []
+  const connections = data?.connections || []
+
+  function update(newNodes, newConnections) {
+    onChange({ nodes: newNodes || nodes, connections: newConnections || connections })
+  }
+
+  function addNode() {
+    const id = `node-${Date.now()}`
+    const newNode = { id, role: 'Nuovo ruolo', member_id: '', x: 80 + Math.random() * 300, y: 80 + Math.random() * 200 }
+    update([...nodes, newNode])
+  }
+
+  function deleteNode(id) {
+    const newNodes = nodes.filter(n => n.id !== id)
+    const newConns = connections.filter(c => c.from !== id && c.to !== id)
+    update(newNodes, newConns)
+    setEditNode(null)
+  }
+
+  function updateNode(id, field, value) {
+    const newNodes = nodes.map(n => n.id === id ? { ...n, [field]: value } : n)
+    update(newNodes)
+  }
+
+  function deleteConnection(idx) {
+    const newConns = connections.filter((_, i) => i !== idx)
+    update(null, newConns)
+  }
+
+  function getMemberName(memberId) {
+    const m = members.find(m => m.id === memberId)
+    return m ? getFullName(m) : ''
+  }
+
+  function getCanvasPoint(e) {
+    const rect = canvasRef.current.getBoundingClientRect()
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top }
+  }
+
+  function handleMouseDown(e, node) {
+    if (e.button !== 0) return
+    e.stopPropagation()
+    const pt = getCanvasPoint(e)
+    setDragging(node.id)
+    setDragOffset({ x: pt.x - node.x, y: pt.y - node.y })
+  }
+
+  function handleMouseMove(e) {
+    if (connecting) {
+      const pt = getCanvasPoint(e)
+      setConnectMouse(pt)
+      return
+    }
+    if (!dragging) return
+    const pt = getCanvasPoint(e)
+    const newNodes = nodes.map(n =>
+      n.id === dragging ? { ...n, x: Math.max(0, pt.x - dragOffset.x), y: Math.max(0, pt.y - dragOffset.y) } : n
+    )
+    update(newNodes)
+  }
+
+  function handleMouseUp(e) {
+    if (connecting) {
+      const pt = getCanvasPoint(e)
+      const target = nodes.find(n =>
+        n.id !== connecting &&
+        pt.x >= n.x && pt.x <= n.x + NODE_W &&
+        pt.y >= n.y && pt.y <= n.y + NODE_H
+      )
+      if (target) {
+        const exists = connections.some(c =>
+          (c.from === connecting && c.to === target.id) ||
+          (c.from === target.id && c.to === connecting)
+        )
+        if (!exists) {
+          update(null, [...connections, { from: connecting, to: target.id }])
+        }
+      }
+      setConnecting(null)
+      setConnectMouse(null)
+      return
+    }
+    setDragging(null)
+  }
+
+  function startConnect(e, nodeId) {
+    e.stopPropagation()
+    e.preventDefault()
+    setConnecting(nodeId)
+    setConnectMouse(getCanvasPoint(e))
+  }
+
+  const inputClass = 'w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500 focus:outline-none'
+
+  return (
+    <div className="rounded-lg border border-gray-200 bg-white">
+      <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
+        <h3 className="text-lg font-semibold text-gray-900">Organigramma</h3>
+        <div className="flex gap-2">
+          <span className="text-xs text-gray-400 self-center">Trascina i nodi per posizionarli. Usa il cerchio blu per collegare.</span>
+          <button
+            type="button"
+            onClick={addNode}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-primary-600 px-3 py-2 text-sm font-medium text-white hover:bg-primary-700"
+          >
+            <Plus size={16} /> Aggiungi Ruolo
+          </button>
+        </div>
+      </div>
+
+      <div
+        ref={canvasRef}
+        className="relative overflow-auto bg-gray-50 select-none"
+        style={{ height: '500px', backgroundImage: 'radial-gradient(circle, #d1d5db 1px, transparent 1px)', backgroundSize: '20px 20px' }}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
+      >
+        {/* SVG connections */}
+        <svg className="absolute inset-0 pointer-events-none" style={{ width: '100%', height: '100%' }}>
+          {connections.map((conn, idx) => {
+            const from = nodes.find(n => n.id === conn.from)
+            const to = nodes.find(n => n.id === conn.to)
+            if (!from || !to) return null
+            const x1 = from.x + NODE_W / 2
+            const y1 = from.y + NODE_H
+            const x2 = to.x + NODE_W / 2
+            const y2 = to.y
+            const midY = (y1 + y2) / 2
+            return (
+              <g key={idx}>
+                <path
+                  d={`M${x1},${y1} C${x1},${midY} ${x2},${midY} ${x2},${y2}`}
+                  stroke="#9ca3af"
+                  strokeWidth="2"
+                  fill="none"
+                />
+                {/* Clickable delete zone */}
+                <circle
+                  cx={(x1 + x2) / 2}
+                  cy={(y1 + y2) / 2}
+                  r="8"
+                  fill="white"
+                  stroke="#ef4444"
+                  strokeWidth="1.5"
+                  className="pointer-events-auto cursor-pointer opacity-0 hover:opacity-100 transition-opacity"
+                  onClick={() => deleteConnection(idx)}
+                />
+                <text
+                  x={(x1 + x2) / 2}
+                  y={(y1 + y2) / 2 + 4}
+                  textAnchor="middle"
+                  fontSize="10"
+                  fill="#ef4444"
+                  className="pointer-events-none opacity-0 hover:opacity-100"
+                  style={{ pointerEvents: 'none' }}
+                >
+                  ×
+                </text>
+              </g>
+            )
+          })}
+          {/* Connecting line preview */}
+          {connecting && connectMouse && (() => {
+            const from = nodes.find(n => n.id === connecting)
+            if (!from) return null
+            return (
+              <line
+                x1={from.x + NODE_W / 2}
+                y1={from.y + NODE_H}
+                x2={connectMouse.x}
+                y2={connectMouse.y}
+                stroke="#3b82f6"
+                strokeWidth="2"
+                strokeDasharray="6 3"
+              />
+            )
+          })()}
+        </svg>
+
+        {/* Nodes */}
+        {nodes.map((node) => (
+          <div
+            key={node.id}
+            className={`absolute rounded-xl border-2 bg-white shadow-md transition-shadow hover:shadow-lg ${
+              dragging === node.id ? 'shadow-xl ring-2 ring-primary-300' : ''
+            } ${connecting ? 'hover:ring-2 hover:ring-blue-400' : ''}`}
+            style={{ left: node.x, top: node.y, width: NODE_W, height: NODE_H }}
+          >
+            {/* Drag handle */}
+            <div
+              className="absolute -top-0 left-0 right-0 h-5 cursor-grab active:cursor-grabbing flex items-center justify-center rounded-t-xl bg-gray-50 border-b border-gray-100"
+              onMouseDown={(e) => handleMouseDown(e, node)}
+            >
+              <GripVertical size={12} className="text-gray-400" />
+            </div>
+
+            {/* Content - click to edit */}
+            <div
+              className="flex h-full flex-col items-center justify-center px-3 pt-4 cursor-pointer"
+              onClick={(e) => { e.stopPropagation(); setEditNode(node.id) }}
+            >
+              <p className="text-xs font-semibold uppercase tracking-wide text-primary-600 truncate max-w-full">
+                {node.role || 'Clicca per editare'}
+              </p>
+              <p className="mt-0.5 text-sm text-gray-800 truncate max-w-full">
+                {node.member_id ? getMemberName(node.member_id) : <span className="italic text-gray-400">—</span>}
+              </p>
+            </div>
+
+            {/* Connect handle (bottom center) */}
+            <div
+              className="absolute -bottom-2.5 left-1/2 -translate-x-1/2 h-5 w-5 rounded-full bg-blue-500 border-2 border-white cursor-crosshair shadow-sm hover:bg-blue-600 flex items-center justify-center"
+              onMouseDown={(e) => startConnect(e, node.id)}
+              title="Trascina per collegare"
+            >
+              <Link2 size={10} className="text-white" />
+            </div>
+
+            {/* Delete button */}
+            <button
+              type="button"
+              className="absolute -right-2 -top-2 rounded-full bg-red-500 p-0.5 text-white shadow-sm opacity-0 hover:bg-red-600 group-hover:opacity-100 transition-opacity"
+              style={{ opacity: editNode === node.id ? 1 : undefined }}
+              onClick={(e) => { e.stopPropagation(); deleteNode(node.id) }}
+            >
+              <X size={12} />
+            </button>
+          </div>
+        ))}
+
+        {/* Edit popup */}
+        {editNode && (() => {
+          const node = nodes.find(n => n.id === editNode)
+          if (!node) return null
+          return (
+            <div
+              className="absolute z-20 w-56 rounded-xl border border-gray-200 bg-white p-3 shadow-xl"
+              style={{ left: node.x + NODE_W + 12, top: node.y }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-xs font-semibold text-gray-600">Modifica ruolo</span>
+                <button type="button" onClick={() => setEditNode(null)} className="text-gray-400 hover:text-gray-600">
+                  <X size={14} />
+                </button>
+              </div>
+              <div className="space-y-2">
+                <input
+                  type="text"
+                  value={node.role}
+                  onChange={(e) => updateNode(node.id, 'role', e.target.value)}
+                  placeholder="Ruolo..."
+                  className={inputClass}
+                />
+                <select
+                  value={node.member_id || ''}
+                  onChange={(e) => updateNode(node.id, 'member_id', e.target.value)}
+                  className={inputClass}
+                >
+                  <option value="">Seleziona persona...</option>
+                  {members.map(m => (
+                    <option key={m.id} value={m.id}>{m.last_name} {m.first_name}</option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => deleteNode(node.id)}
+                  className="w-full rounded-lg bg-red-50 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-100"
+                >
+                  Elimina ruolo
+                </button>
+              </div>
+            </div>
+          )
+        })()}
+
+        {/* Empty state */}
+        {nodes.length === 0 && (
+          <div className="flex h-full items-center justify-center">
+            <div className="text-center">
+              <p className="text-sm text-gray-500 mb-3">Clicca "Aggiungi Ruolo" per iniziare a creare l'organigramma</p>
+              <p className="text-xs text-gray-400">Trascina i nodi per posizionarli e usa il cerchio blu per collegarli</p>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

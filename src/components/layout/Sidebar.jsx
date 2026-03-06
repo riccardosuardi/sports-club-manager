@@ -49,10 +49,9 @@ const navigation = [
   {
     name: 'Impostazioni',
     icon: Settings,
-    roles: ['admin'],
     children: [
       { name: 'Utente', to: '/impostazioni/utente', icon: User },
-      { name: 'Associazione', to: '/impostazioni/associazione', icon: Building2 },
+      { name: 'Associazione', to: '/impostazioni/associazione', icon: Building2, roles: ['admin'] },
     ],
   },
 ]
@@ -91,9 +90,16 @@ export default function Sidebar({ open, onClose, collapsed, onToggleCollapse }) 
   const { hasRole, profile, signOut } = useAuth()
   const location = useLocation()
 
-  const filteredNav = navigation.filter(
-    (item) => !item.roles || item.roles.some((r) => hasRole(r))
-  )
+  const filteredNav = navigation
+    .filter((item) => !item.roles || item.roles.some((r) => hasRole(r)))
+    .map((item) => {
+      if (item.children) {
+        const filteredChildren = item.children.filter((c) => !c.roles || c.roles.some((r) => hasRole(r)))
+        return { ...item, children: filteredChildren }
+      }
+      return item
+    })
+    .filter((item) => !item.children || item.children.length > 0)
 
   const [expanded, setExpanded] = useState(() => {
     const initial = {}
@@ -149,18 +155,23 @@ export default function Sidebar({ open, onClose, collapsed, onToggleCollapse }) 
         } ${collapsed ? 'w-16' : 'w-64'}`}
       >
         {/* Logo */}
-        <div className="flex h-14 items-center justify-between border-b border-gray-200 px-4">
-          {collapsed ? (
-            <Trophy className="mx-auto text-primary-600" size={24} />
-          ) : (
-            <div className="flex items-center gap-2">
-              <Trophy className="text-primary-600" size={24} />
-              <span className="text-lg font-bold text-gray-900">SportClub</span>
-            </div>
+        <div className="flex flex-col border-b border-gray-200">
+          <div className="flex h-14 items-center justify-between px-4">
+            {collapsed ? (
+              <Trophy className="mx-auto text-primary-600" size={24} />
+            ) : (
+              <div className="flex items-center gap-2">
+                <Trophy className="text-primary-600" size={24} />
+                <span className="text-lg font-bold text-gray-900">SportClub</span>
+              </div>
+            )}
+            <button onClick={onClose} className="rounded-md p-1 text-gray-400 hover:bg-gray-100 lg:hidden">
+              <X size={20} />
+            </button>
+          </div>
+          {!collapsed && (
+            <div className="px-4 pb-2 text-xs text-gray-400">v0.3.0-beta</div>
           )}
-          <button onClick={onClose} className="rounded-md p-1 text-gray-400 hover:bg-gray-100 lg:hidden">
-            <X size={20} />
-          </button>
         </div>
 
         {/* Navigation */}
