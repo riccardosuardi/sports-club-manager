@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Plus, GraduationCap, Users, Calendar, ChevronLeft, ChevronRight, List, Eye, Pencil, Trash2, UserPlus } from 'lucide-react'
+import { Plus, GraduationCap, Users, Calendar, ChevronLeft, ChevronRight, List, Eye, Pencil, Trash2, UserPlus, Columns3, ArrowLeft } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, getDay, addMonths, subMonths, isSameDay, isToday } from 'date-fns'
 import { it } from 'date-fns/locale'
@@ -10,6 +10,16 @@ import Modal from '../components/ui/Modal'
 import ConfirmDialog from '../components/ui/ConfirmDialog'
 
 const WEEKDAYS = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom']
+
+const PARTICIPANT_STATUSES = [
+  { key: 'contattato', label: 'Contattato', color: 'border-purple-400', bg: 'bg-purple-50', dot: 'bg-purple-500', chip: 'bg-purple-50 text-purple-700 ring-purple-200' },
+  { key: 'interessato', label: 'Interessato', color: 'border-orange-400', bg: 'bg-orange-50', dot: 'bg-orange-500', chip: 'bg-orange-50 text-orange-700 ring-orange-200' },
+  { key: 'non_risposta', label: 'Non risposta', color: 'border-gray-400', bg: 'bg-gray-50', dot: 'bg-gray-500', chip: 'bg-gray-100 text-gray-700 ring-gray-300' },
+  { key: 'presente', label: 'Presente', color: 'border-green-400', bg: 'bg-green-50', dot: 'bg-green-500', chip: 'bg-green-50 text-green-700 ring-green-200' },
+  { key: 'non_presente', label: 'Non presente', color: 'border-red-400', bg: 'bg-red-50', dot: 'bg-red-500', chip: 'bg-red-50 text-red-700 ring-red-200' },
+]
+
+export { PARTICIPANT_STATUSES }
 
 export default function Courses() {
   const [courses, setCourses] = useState([])
@@ -26,6 +36,7 @@ export default function Courses() {
   const [enrollMemberId, setEnrollMemberId] = useState('')
   const [viewMode, setViewMode] = useState('list')
   const [currentMonth, setCurrentMonth] = useState(new Date())
+  const [boardCourse, setBoardCourse] = useState(null)
 
   useEffect(() => { fetchData() }, [])
 
@@ -99,18 +110,22 @@ export default function Courses() {
     return time.slice(0, 5)
   }
 
+  if (boardCourse) {
+    return <ActivityBoard course={boardCourse} onBack={() => setBoardCourse(null)} />
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Attivit&agrave;</h1>
-          <p className="text-sm text-gray-500">{courses.length} attivit&agrave;, {courses.filter(c => c.is_active).length} attive</p>
+          <h1 className="text-2xl font-bold text-gray-900">Attività</h1>
+          <p className="text-sm text-gray-500">{courses.length} attività, {courses.filter(c => c.is_active).length} attive</p>
         </div>
         <button
           onClick={() => { setEditing(null); setShowForm(true) }}
           className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-700"
         >
-          <Plus size={18} /> Nuova Attivit&agrave;
+          <Plus size={18} /> Nuova Attività
         </button>
       </div>
 
@@ -131,7 +146,7 @@ export default function Courses() {
           </button>
         </div>
         <div className="sm:w-80">
-          <SearchInput value={search} onChange={setSearch} placeholder="Cerca attivit&agrave;..." />
+          <SearchInput value={search} onChange={setSearch} placeholder="Cerca attività..." />
         </div>
       </div>
 
@@ -188,14 +203,15 @@ export default function Courses() {
           </div>
         </div>
       ) : filtered.length === 0 ? (
-        <EmptyState icon={GraduationCap} title="Nessuna attivit&agrave; trovata" description="Crea la prima attivit&agrave;" />
+        <EmptyState icon={GraduationCap} title="Nessuna attività trovata" description="Crea la prima attività" />
       ) : (
         /* List view */
         <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Attivit&agrave;</th>
+                <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Attività</th>
+                <th className="hidden px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 md:table-cell">Tipo</th>
                 <th className="hidden px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 md:table-cell">Periodo</th>
                 <th className="hidden px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 md:table-cell">Orario</th>
                 <th className="hidden px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 md:table-cell">Iscritti</th>
@@ -215,6 +231,13 @@ export default function Courses() {
                         {course.description && <p className="text-xs text-gray-500 truncate max-w-xs">{course.description}</p>}
                       </div>
                     </td>
+                    <td className="hidden whitespace-nowrap px-4 py-3 text-sm md:table-cell">
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                        course.activity_type === 'marketing' ? 'bg-orange-100 text-orange-700' : 'bg-primary-100 text-primary-700'
+                      }`}>
+                        {course.activity_type === 'marketing' ? 'Marketing' : 'Atleti'}
+                      </span>
+                    </td>
                     <td className="hidden whitespace-nowrap px-4 py-3 text-sm text-gray-600 md:table-cell">
                       {course.start_date ? format(parseISO(course.start_date), 'dd/MM/yyyy', { locale: it }) : '-'}
                       {course.end_date && course.end_date !== course.start_date && ` - ${format(parseISO(course.end_date), 'dd/MM/yyyy', { locale: it })}`}
@@ -226,19 +249,12 @@ export default function Courses() {
                       {count}{course.max_participants ? ` / ${course.max_participants}` : ''}
                     </td>
                     <td className="hidden whitespace-nowrap px-4 py-3 text-sm text-gray-600 md:table-cell">
-                      {course.price ? `\u20AC ${Number(course.price).toFixed(2)}` : '-'}
+                      {course.price ? `€ ${Number(course.price).toFixed(2)}` : '-'}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3">
                       <div className="flex flex-wrap gap-1.5">
                         {course.is_youth && (
                           <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">Giovanile</span>
-                        )}
-                        {course.target_type && course.target_type !== 'atleti' && (
-                          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                            course.target_type === 'contatti' ? 'bg-orange-100 text-orange-700' : 'bg-purple-100 text-purple-700'
-                          }`}>
-                            {course.target_type === 'contatti' ? 'Contatti' : 'Atleti + Contatti'}
-                          </span>
                         )}
                         <Badge status={course.is_active ? 'attivo' : 'sospeso'}>
                           {course.is_active ? 'Attivo' : 'Inattivo'}
@@ -247,6 +263,9 @@ export default function Courses() {
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-right">
                       <div className="flex justify-end gap-1">
+                        <button onClick={() => setBoardCourse(course)} className="rounded-lg p-1.5 text-indigo-600 hover:bg-indigo-50" title="Board partecipanti">
+                          <Columns3 size={16} />
+                        </button>
                         <button onClick={() => { setSelectedCourse(course); setShowEnroll(true) }} className="rounded-lg p-1.5 text-primary-600 hover:bg-primary-50" title="Iscrivi atleta">
                           <UserPlus size={16} />
                         </button>
@@ -325,8 +344,8 @@ export default function Courses() {
         </Modal>
       )}
 
-      {/* Form attivit\u00e0 */}
-      <Modal open={showForm} onClose={() => setShowForm(false)} title={editing ? 'Modifica Attivit\u00e0' : 'Nuova Attivit\u00e0'} size="md">
+      {/* Form attività */}
+      <Modal open={showForm} onClose={() => setShowForm(false)} title={editing ? 'Modifica Attività' : 'Nuova Attività'} size="md">
         <CourseForm course={editing} onSaved={() => { setShowForm(false); fetchData() }} onCancel={() => setShowForm(false)} />
       </Modal>
 
@@ -334,7 +353,7 @@ export default function Courses() {
         open={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
         onConfirm={() => handleDelete(deleteTarget?.id)}
-        title="Elimina Attivit\u00e0"
+        title="Elimina Attività"
         message={`Sei sicuro di voler eliminare "${deleteTarget?.name}"?`}
         confirmLabel="Elimina"
         danger
@@ -343,7 +362,7 @@ export default function Courses() {
   )
 }
 
-function CourseForm({ course, onSaved, onCancel }) {
+export function CourseForm({ course, onSaved, onCancel, defaultActivityType }) {
   const [form, setForm] = useState({
     name: course?.name || '',
     description: course?.description || '',
@@ -356,6 +375,7 @@ function CourseForm({ course, onSaved, onCancel }) {
     is_active: course?.is_active ?? true,
     is_youth: course?.is_youth ?? false,
     target_type: course?.target_type || 'atleti',
+    activity_type: course?.activity_type || defaultActivityType || 'atleti',
   })
   const [multiDay, setMultiDay] = useState(!!(course?.end_date && course.end_date !== course.start_date))
   const [error, setError] = useState('')
@@ -398,54 +418,84 @@ function CourseForm({ course, onSaved, onCancel }) {
   }
 
   const inputClass = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500 focus:outline-none'
+  const labelClass = 'mb-1 block text-sm font-medium text-gray-700'
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       {error && <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</div>}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="sm:col-span-2">
-          <label className="mb-1 block text-sm font-medium text-gray-700">Nome Attivit&agrave; *</label>
+          <label className={labelClass}>Tipo Attività *</label>
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={() => set('activity_type', 'atleti')}
+              className={`flex-1 rounded-lg border-2 px-4 py-2.5 text-sm font-medium transition-colors ${
+                form.activity_type === 'atleti'
+                  ? 'border-primary-500 bg-primary-50 text-primary-700'
+                  : 'border-gray-200 text-gray-600 hover:border-gray-300'
+              }`}
+            >
+              <Users size={18} className="mx-auto mb-1" />
+              Atleti Iscritti
+            </button>
+            <button
+              type="button"
+              onClick={() => set('activity_type', 'marketing')}
+              className={`flex-1 rounded-lg border-2 px-4 py-2.5 text-sm font-medium transition-colors ${
+                form.activity_type === 'marketing'
+                  ? 'border-orange-500 bg-orange-50 text-orange-700'
+                  : 'border-gray-200 text-gray-600 hover:border-gray-300'
+              }`}
+            >
+              <GraduationCap size={18} className="mx-auto mb-1" />
+              Marketing
+            </button>
+          </div>
+        </div>
+        <div className="sm:col-span-2">
+          <label className={labelClass}>Nome Attività *</label>
           <input type="text" value={form.name} onChange={(e) => set('name', e.target.value)} required className={inputClass} />
         </div>
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Data Inizio</label>
+          <label className={labelClass}>Data Inizio</label>
           <input type="date" value={form.start_date || ''} onChange={(e) => set('start_date', e.target.value)} className={inputClass} />
         </div>
         <div className="flex items-end">
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={multiDay} onChange={(e) => handleMultiDayToggle(e.target.checked)} className="rounded border-gray-300 text-primary-600" />
-            <span className="text-gray-700">Per pi&ugrave; giorni</span>
+            <span className="text-gray-700">Per più giorni</span>
           </label>
         </div>
         {multiDay && (
           <div className="sm:col-span-2">
-            <label className="mb-1 block text-sm font-medium text-gray-700">Data Fine</label>
+            <label className={labelClass}>Data Fine</label>
             <input type="date" value={form.end_date || ''} onChange={(e) => set('end_date', e.target.value)} min={form.start_date || undefined} className={inputClass} />
           </div>
         )}
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Orario dalle</label>
+          <label className={labelClass}>Orario dalle</label>
           <input type="time" value={form.start_time || ''} onChange={(e) => set('start_time', e.target.value)} className={inputClass} />
         </div>
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Orario alle</label>
+          <label className={labelClass}>Orario alle</label>
           <input type="time" value={form.end_time || ''} onChange={(e) => set('end_time', e.target.value)} className={inputClass} />
         </div>
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Max Partecipanti</label>
+          <label className={labelClass}>Max Partecipanti</label>
           <input type="number" value={form.max_participants || ''} onChange={(e) => set('max_participants', e.target.value)} className={inputClass} />
         </div>
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Prezzo (&euro;)</label>
+          <label className={labelClass}>Prezzo (€)</label>
           <input type="number" step="0.01" value={form.price || ''} onChange={(e) => set('price', e.target.value)} className={inputClass} />
         </div>
         <div className="sm:col-span-2">
-          <label className="mb-1 block text-sm font-medium text-gray-700">Descrizione</label>
+          <label className={labelClass}>Descrizione</label>
           <textarea value={form.description || ''} onChange={(e) => set('description', e.target.value)} rows={3} className={inputClass} />
         </div>
         <div>
           <label className="flex items-center gap-3 text-sm">
-            <span className="font-medium text-gray-700">Attivit&agrave; attiva</span>
+            <span className="font-medium text-gray-700">Attività attiva</span>
             <button
               type="button"
               role="switch"
@@ -459,7 +509,7 @@ function CourseForm({ course, onSaved, onCancel }) {
         </div>
         <div>
           <label className="flex items-center gap-3 text-sm">
-            <span className="font-medium text-gray-700">Attivit&agrave; giovanile</span>
+            <span className="font-medium text-gray-700">Attività giovanile</span>
             <button
               type="button"
               role="switch"
@@ -483,9 +533,156 @@ function CourseForm({ course, onSaved, onCancel }) {
       <div className="flex justify-end gap-3 border-t pt-4">
         <button type="button" onClick={onCancel} className="rounded-lg border border-gray-300 px-4 py-2 text-sm">Annulla</button>
         <button type="submit" disabled={saving} className="rounded-lg bg-primary-600 px-4 py-2 text-sm text-white hover:bg-primary-700 disabled:opacity-50">
-          {saving ? 'Salvataggio...' : course ? 'Salva' : 'Crea Attivit\u00e0'}
+          {saving ? 'Salvataggio...' : course ? 'Salva' : 'Crea Attività'}
         </button>
       </div>
     </form>
+  )
+}
+
+export function ActivityBoard({ course, onBack }) {
+  const [participants, setParticipants] = useState([])
+  const [allUsers, setAllUsers] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [showAdd, setShowAdd] = useState(false)
+  const [addUserId, setAddUserId] = useState('')
+  const [dragItem, setDragItem] = useState(null)
+
+  useEffect(() => { fetchParticipants() }, [course.id])
+
+  async function fetchParticipants() {
+    setLoading(true)
+    const [partRes, usersRes] = await Promise.all([
+      supabase.from('activity_participants').select('*, user:user_id(id, first_name, last_name, email, phone)').eq('course_id', course.id),
+      supabase.from('users').select('id, first_name, last_name, email, phone').order('last_name'),
+    ])
+    setParticipants(partRes.data || [])
+    setAllUsers(usersRes.data || [])
+    setLoading(false)
+  }
+
+  async function addParticipant() {
+    if (!addUserId) return
+    await supabase.from('activity_participants').insert({ course_id: course.id, user_id: addUserId, status: 'contattato' })
+    setAddUserId('')
+    setShowAdd(false)
+    fetchParticipants()
+  }
+
+  async function updateStatus(participantId, newStatus) {
+    await supabase.from('activity_participants').update({ status: newStatus }).eq('id', participantId)
+    setParticipants(prev => prev.map(p => p.id === participantId ? { ...p, status: newStatus } : p))
+  }
+
+  async function removeParticipant(id) {
+    await supabase.from('activity_participants').delete().eq('id', id)
+    setParticipants(prev => prev.filter(p => p.id !== id))
+  }
+
+  const existingUserIds = new Set(participants.map(p => p.user_id))
+  const availableUsers = allUsers.filter(u => !existingUserIds.has(u.id))
+
+  function handleDragStart(e, participant) {
+    setDragItem(participant)
+    e.dataTransfer.effectAllowed = 'move'
+  }
+
+  function handleDrop(e, status) {
+    e.preventDefault()
+    if (dragItem && dragItem.status !== status) {
+      updateStatus(dragItem.id, status)
+    }
+    setDragItem(null)
+  }
+
+  function handleDragOver(e) {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center gap-4">
+        <button onClick={onBack} className="rounded-lg p-2 text-gray-500 hover:bg-gray-100">
+          <ArrowLeft size={20} />
+        </button>
+        <div className="flex-1">
+          <h1 className="text-2xl font-bold text-gray-900">{course.name}</h1>
+          <p className="text-sm text-gray-500">Board partecipanti · {participants.length} persone</p>
+        </div>
+        <button
+          onClick={() => setShowAdd(true)}
+          className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-700"
+        >
+          <Plus size={18} /> Aggiungi Persona
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="py-12 text-center text-gray-500">Caricamento...</div>
+      ) : (
+        <div className="flex gap-4 overflow-x-auto pb-4">
+          {PARTICIPANT_STATUSES.map((col) => {
+            const colParticipants = participants.filter(p => p.status === col.key)
+            return (
+              <div
+                key={col.key}
+                className={`flex w-64 shrink-0 flex-col rounded-lg border-t-4 ${col.color} bg-white shadow-sm`}
+                onDragOver={handleDragOver}
+                onDrop={(e) => handleDrop(e, col.key)}
+              >
+                <div className={`flex items-center gap-2 px-3 py-3 ${col.bg} rounded-t-lg`}>
+                  <div className={`h-2.5 w-2.5 rounded-full ${col.dot}`} />
+                  <span className="text-sm font-semibold text-gray-800">{col.label}</span>
+                  <span className="ml-auto rounded-full bg-white/80 px-2 py-0.5 text-xs font-medium text-gray-600">{colParticipants.length}</span>
+                </div>
+                <div className="flex flex-1 flex-col gap-2 p-2" style={{ minHeight: '120px' }}>
+                  {colParticipants.map((p) => (
+                    <div
+                      key={p.id}
+                      draggable
+                      onDragStart={(e) => handleDragStart(e, p)}
+                      className="group cursor-grab rounded-lg border border-gray-200 bg-white p-3 shadow-sm transition-shadow hover:shadow-md active:cursor-grabbing"
+                    >
+                      <div className="flex items-start justify-between">
+                        <p className="text-sm font-medium text-gray-900">{p.user?.last_name} {p.user?.first_name}</p>
+                        <button
+                          onClick={() => removeParticipant(p.id)}
+                          className="rounded p-0.5 text-gray-400 opacity-0 transition-opacity hover:text-red-500 group-hover:opacity-100"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                      {p.user?.phone && <p className="mt-1 text-xs text-gray-500">{p.user.phone}</p>}
+                      {p.user?.email && <p className="text-xs text-gray-400 truncate">{p.user.email}</p>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Aggiungi persona */}
+      <Modal open={showAdd} onClose={() => setShowAdd(false)} title="Aggiungi persona alla board" size="sm">
+        <div className="space-y-4">
+          <select
+            value={addUserId}
+            onChange={(e) => setAddUserId(e.target.value)}
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500 focus:outline-none"
+          >
+            <option value="">Seleziona persona...</option>
+            {availableUsers.map((u) => (
+              <option key={u.id} value={u.id}>{u.last_name} {u.first_name}</option>
+            ))}
+          </select>
+          <div className="flex justify-end gap-3">
+            <button onClick={() => setShowAdd(false)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm">Annulla</button>
+            <button onClick={addParticipant} className="rounded-lg bg-primary-600 px-4 py-2 text-sm text-white hover:bg-primary-700">Aggiungi</button>
+          </div>
+        </div>
+      </Modal>
+    </div>
   )
 }

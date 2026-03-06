@@ -9,6 +9,7 @@ import Courses from './pages/Courses'
 import Clothing from './pages/Clothing'
 import Competitions from './pages/Competitions'
 import Marketing from './pages/Marketing'
+import MarketingActivities from './pages/MarketingActivities'
 import SettingsUser from './pages/SettingsUser'
 import SettingsAssociation from './pages/SettingsAssociation'
 import YouthAthletes from './pages/YouthAthletes'
@@ -74,6 +75,14 @@ function AppRoutes() {
           element={
             <ProtectedRoute roles={['admin', 'segreteria']}>
               <Marketing />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/marketing/attivita"
+          element={
+            <ProtectedRoute roles={['admin', 'segreteria']}>
+              <MarketingActivities />
             </ProtectedRoute>
           }
         />

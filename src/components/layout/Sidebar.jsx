@@ -43,6 +43,7 @@ const navigation = [
     roles: ['admin', 'segreteria'],
     children: [
       { name: 'Contatti', to: '/marketing/contatti', icon: Contact },
+      { name: 'Attività', to: '/marketing/attivita', icon: GraduationCap },
     ],
   },
   {
