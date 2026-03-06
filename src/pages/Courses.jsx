@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Plus, GraduationCap, Users, Calendar, ChevronLeft, ChevronRight, List, Eye, Pencil, Trash2, UserPlus, Columns3, ArrowLeft } from 'lucide-react'
+import { Plus, GraduationCap, Users, Calendar, ChevronLeft, ChevronRight, List, Eye, Pencil, Trash2, UserPlus, Columns3, ArrowLeft, Phone, Mail, MessageCircle } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, getDay, addMonths, subMonths, isSameDay, isToday } from 'date-fns'
 import { it } from 'date-fns/locale'
@@ -540,6 +540,28 @@ export function CourseForm({ course, onSaved, onCancel, defaultActivityType }) {
   )
 }
 
+function ActivityContactIcon({ user, size = 14 }) {
+  if (!user) return null
+  const method = user.preferred_contact_method
+  const phone = (user.phone || '').replace(/\s+/g, '')
+  if (method === 'whatsapp' && phone) {
+    return (
+      <a href={`https://wa.me/${phone.startsWith('+') ? phone.slice(1) : '39' + phone}`} target="_blank" rel="noopener noreferrer" className="rounded p-0.5 text-green-600 hover:bg-green-50" title="WhatsApp">
+        <MessageCircle size={size} />
+      </a>
+    )
+  }
+  if (method === 'phone' && phone) {
+    return <a href={`tel:${phone}`} className="rounded p-0.5 text-blue-600 hover:bg-blue-50" title="Chiama"><Phone size={size} /></a>
+  }
+  if (method === 'email' && user.email) {
+    return <a href={`mailto:${user.email}`} className="rounded p-0.5 text-orange-600 hover:bg-orange-50" title="Email"><Mail size={size} /></a>
+  }
+  if (user.email) return <a href={`mailto:${user.email}`} className="rounded p-0.5 text-gray-400 hover:bg-gray-50" title="Email"><Mail size={size} /></a>
+  if (phone) return <a href={`tel:${phone}`} className="rounded p-0.5 text-gray-400 hover:bg-gray-50" title="Chiama"><Phone size={size} /></a>
+  return null
+}
+
 export function ActivityBoard({ course, onBack }) {
   const [participants, setParticipants] = useState([])
   const [allUsers, setAllUsers] = useState([])
@@ -547,14 +569,15 @@ export function ActivityBoard({ course, onBack }) {
   const [showAdd, setShowAdd] = useState(false)
   const [addUserId, setAddUserId] = useState('')
   const [dragItem, setDragItem] = useState(null)
+  const [editParticipant, setEditParticipant] = useState(null)
 
   useEffect(() => { fetchParticipants() }, [course.id])
 
   async function fetchParticipants() {
     setLoading(true)
     const [partRes, usersRes] = await Promise.all([
-      supabase.from('activity_participants').select('*, user:user_id(id, first_name, last_name, email, phone)').eq('course_id', course.id),
-      supabase.from('users').select('id, first_name, last_name, email, phone').order('last_name'),
+      supabase.from('activity_participants').select('*, user:user_id(id, first_name, last_name, email, phone, member_type, preferred_contact_method, parent_id)').eq('course_id', course.id),
+      supabase.from('users').select('id, first_name, last_name, email, phone, member_type, preferred_contact_method, parent_id').order('last_name'),
     ])
     setParticipants(partRes.data || [])
     setAllUsers(usersRes.data || [])
@@ -627,7 +650,7 @@ export function ActivityBoard({ course, onBack }) {
             return (
               <div
                 key={col.key}
-                className={`flex w-64 shrink-0 flex-col rounded-lg border-t-4 ${col.color} bg-white shadow-sm`}
+                className={`flex min-w-[200px] flex-1 flex-col rounded-lg border-t-4 ${col.color} bg-gray-50 shadow-sm`}
                 onDragOver={handleDragOver}
                 onDrop={(e) => handleDrop(e, col.key)}
               >
@@ -637,7 +660,9 @@ export function ActivityBoard({ course, onBack }) {
                   <span className="ml-auto rounded-full bg-white/80 px-2 py-0.5 text-xs font-medium text-gray-600">{colParticipants.length}</span>
                 </div>
                 <div className="flex flex-1 flex-col gap-2 p-2" style={{ minHeight: '120px' }}>
-                  {colParticipants.map((p) => (
+                  {colParticipants.map((p) => {
+                    const parentUser = p.user?.parent_id ? allUsers.find(u => u.id === p.user.parent_id) : null
+                    return (
                     <div
                       key={p.id}
                       draggable
@@ -645,18 +670,52 @@ export function ActivityBoard({ course, onBack }) {
                       className="group cursor-grab rounded-lg border border-gray-200 bg-white p-3 shadow-sm transition-shadow hover:shadow-md active:cursor-grabbing"
                     >
                       <div className="flex items-start justify-between">
-                        <p className="text-sm font-medium text-gray-900">{p.user?.last_name} {p.user?.first_name}</p>
-                        <button
-                          onClick={() => removeParticipant(p.id)}
-                          className="rounded p-0.5 text-gray-400 opacity-0 transition-opacity hover:text-red-500 group-hover:opacity-100"
-                        >
-                          <Trash2 size={14} />
-                        </button>
+                        <p className="text-sm font-medium text-gray-900">{p.user?.first_name} {p.user?.last_name}</p>
+                        <div className="flex items-center gap-0.5">
+                          <ActivityContactIcon user={p.user} size={12} />
+                          <button
+                            onClick={() => { setEditParticipant(p) }}
+                            className="rounded p-0.5 text-gray-400 opacity-0 transition-opacity hover:text-primary-600 group-hover:opacity-100"
+                            title="Modifica"
+                          >
+                            <Pencil size={14} />
+                          </button>
+                          <button
+                            onClick={() => removeParticipant(p.id)}
+                            className="rounded p-0.5 text-gray-400 opacity-0 transition-opacity hover:text-red-500 group-hover:opacity-100"
+                            title="Elimina"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
                       </div>
-                      {p.user?.phone && <p className="mt-1 text-xs text-gray-500">{p.user.phone}</p>}
-                      {p.user?.email && <p className="text-xs text-gray-400 truncate">{p.user.email}</p>}
+                      {p.user?.email && (
+                        <p className="mt-0.5 flex items-center gap-1 text-xs text-gray-500">
+                          <Mail size={10} /> {p.user.email}
+                        </p>
+                      )}
+                      {p.user?.phone && (
+                        <p className="mt-0.5 flex items-center gap-1 text-xs text-gray-500">
+                          <Phone size={10} /> {p.user.phone}
+                        </p>
+                      )}
+                      {parentUser && (
+                        <p className="mt-0.5 flex items-center gap-1 text-xs text-blue-600">
+                          <Users size={10} /> {parentUser.first_name} {parentUser.last_name}
+                        </p>
+                      )}
+                      {p.user?.member_type && (
+                        <div className="mt-1.5">
+                          <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
+                            p.user.member_type === 'giovane' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'
+                          }`}>
+                            {p.user.member_type === 'giovane' ? 'Giovane' : 'Adulto'}
+                          </span>
+                        </div>
+                      )}
                     </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </div>
             )
