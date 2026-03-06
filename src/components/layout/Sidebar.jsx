@@ -11,6 +11,7 @@ import {
   Trophy,
   Calendar,
   Shapes,
+  UserRoundPlus,
   X,
   ChevronDown,
   ChevronLeft,
@@ -21,10 +22,12 @@ import {
   Building2,
 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
+import { useAssociation } from '../../context/AssociationContext'
 
 const navigation = [
   { name: 'Dashboard', to: '/', icon: LayoutDashboard },
   { name: 'Atleti', to: '/atleti', icon: Users },
+  { name: 'Ospiti', to: '/ospiti', icon: UserRoundPlus },
   { name: 'Gare', to: '/gare', icon: Calendar },
   { name: 'Attività', to: '/attivita', icon: GraduationCap },
   { name: 'Abbigliamento', to: '/abbigliamento', icon: Shirt },
@@ -88,6 +91,7 @@ function Tooltip({ label, children }) {
 
 export default function Sidebar({ open, onClose, collapsed, onToggleCollapse }) {
   const { hasRole, profile, signOut } = useAuth()
+  const { settings: assocSettings } = useAssociation()
   const location = useLocation()
 
   const filteredNav = navigation
@@ -158,11 +162,19 @@ export default function Sidebar({ open, onClose, collapsed, onToggleCollapse }) 
         <div className="flex flex-col border-b border-gray-200">
           <div className="flex h-14 items-center justify-between px-4">
             {collapsed ? (
-              <Trophy className="mx-auto text-primary-600" size={24} />
+              assocSettings?.logo_url ? (
+                <img src={assocSettings.logo_url} alt="" className="mx-auto h-8 w-8 rounded-lg object-cover" />
+              ) : (
+                <Trophy className="mx-auto text-primary-600" size={24} />
+              )
             ) : (
-              <div className="flex items-center gap-2">
-                <Trophy className="text-primary-600" size={24} />
-                <span className="text-lg font-bold text-gray-900">SportClub</span>
+              <div className="flex items-center gap-2 min-w-0">
+                {assocSettings?.logo_url ? (
+                  <img src={assocSettings.logo_url} alt="" className="h-8 w-8 shrink-0 rounded-lg object-cover" />
+                ) : (
+                  <Trophy className="shrink-0 text-primary-600" size={24} />
+                )}
+                <span className="text-lg font-bold text-gray-900 truncate">{assocSettings?.name || 'SportClub'}</span>
               </div>
             )}
             <button onClick={onClose} className="rounded-md p-1 text-gray-400 hover:bg-gray-100 lg:hidden">

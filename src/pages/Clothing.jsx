@@ -135,11 +135,11 @@ export default function Clothing() {
                     )}
                     <div className="px-5 pt-5 pb-2">
                       <div className="mb-2 flex items-start justify-between">
-                        <div>
-                          <h3 className="font-semibold text-gray-900">{item.name}</h3>
+                        <div className="min-w-0 flex-1">
+                          <h3 className="font-semibold text-gray-900 break-words">{item.name}</h3>
                           {item.category && <p className="text-xs text-gray-500">{item.category}</p>}
                         </div>
-                        {item.price && <span className="text-lg font-bold text-gray-900">&euro; {Number(item.price).toFixed(2)}</span>}
+                        {item.price && <span className="shrink-0 text-lg font-bold text-gray-900">&euro; {Number(item.price).toFixed(2)}</span>}
                       </div>
                     </div>
                   </div>

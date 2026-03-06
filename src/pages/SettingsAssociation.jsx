@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
-import { Building2, Save, Plus, Trash2, Search, GripVertical, X, Link2 } from 'lucide-react'
+import { Building2, Save, Plus, Trash2, Search, GripVertical, X, Link2, ImagePlus } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { getFullName } from '../lib/utils'
 
@@ -19,6 +19,7 @@ const DEFAULT_SETTINGS = {
   founded_year: '',
   sport_type: '',
   notes: '',
+  logo_url: '',
   organigramma: { nodes: [], connections: [] },
 }
 
@@ -58,6 +59,8 @@ export default function SettingsAssociation() {
   const [saved, setSaved] = useState(false)
   const [activeTab, setActiveTab] = useState('generale')
   const [members, setMembers] = useState([])
+  const [logoFile, setLogoFile] = useState(null)
+  const [logoPreview, setLogoPreview] = useState(null)
 
   useEffect(() => { fetchSettings() }, [])
 
@@ -70,6 +73,7 @@ export default function SettingsAssociation() {
       ])
       if (settingsRes.data) {
         const data = { ...DEFAULT_SETTINGS, ...settingsRes.data }
+        if (data.logo_url) setLogoPreview(data.logo_url)
         if (typeof data.organigramma === 'string') {
           try { data.organigramma = JSON.parse(data.organigramma) } catch { data.organigramma = { nodes: [], connections: [] } }
         }
@@ -89,9 +93,12 @@ export default function SettingsAssociation() {
     setSaved(false)
   }
 
+  const [saveError, setSaveError] = useState('')
+
   async function handleSubmit(e) {
     e.preventDefault()
     setSaving(true)
+    setSaveError('')
 
     const payload = { ...form }
     delete payload.id
@@ -99,21 +106,38 @@ export default function SettingsAssociation() {
     delete payload.updated_at
     payload.organigramma = JSON.stringify(payload.organigramma || { nodes: [], connections: [] })
 
-    const { data: existing } = await supabase
-      .from('association_settings')
-      .select('id')
-      .limit(1)
-      .maybeSingle()
+    try {
+      // Upload logo if selected
+      if (logoFile) {
+        const ext = logoFile.name.split('.').pop()
+        const filePath = `logo/${Date.now()}.${ext}`
+        const { error: uploadErr } = await supabase.storage.from('images').upload(filePath, logoFile)
+        if (uploadErr) throw uploadErr
+        const { data: urlData } = supabase.storage.from('images').getPublicUrl(filePath)
+        payload.logo_url = urlData.publicUrl
+      }
 
-    if (existing?.id) {
-      await supabase.from('association_settings').update(payload).eq('id', existing.id)
-    } else {
-      await supabase.from('association_settings').insert(payload)
+      const { data: existing } = await supabase
+        .from('association_settings')
+        .select('id')
+        .limit(1)
+        .maybeSingle()
+
+      if (existing?.id) {
+        const { error } = await supabase.from('association_settings').update(payload).eq('id', existing.id)
+        if (error) throw error
+      } else {
+        const { error } = await supabase.from('association_settings').insert(payload)
+        if (error) throw error
+      }
+
+      setSaved(true)
+      setTimeout(() => setSaved(false), 3000)
+    } catch (err) {
+      setSaveError(err.message)
+    } finally {
+      setSaving(false)
     }
-
-    setSaving(false)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 3000)
   }
 
   const inputClass = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500 focus:outline-none'
@@ -153,6 +177,26 @@ export default function SettingsAssociation() {
               <h3 className="text-lg font-semibold text-gray-900">Dati generali</h3>
             </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {/* Logo */}
+              <div className="sm:col-span-2">
+                <label className="mb-1 block text-sm font-medium text-gray-700">Logo Associazione</label>
+                <div className="flex items-center gap-4">
+                  {(logoPreview || form.logo_url) ? (
+                    <img src={logoPreview || form.logo_url} alt="Logo" className="h-16 w-16 rounded-lg object-cover border border-gray-200" />
+                  ) : (
+                    <div className="flex h-16 w-16 items-center justify-center rounded-lg border-2 border-dashed border-gray-300 bg-gray-50">
+                      <ImagePlus size={20} className="text-gray-400" />
+                    </div>
+                  )}
+                  <label className="cursor-pointer rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                    Carica logo
+                    <input type="file" accept="image/*" onChange={(e) => {
+                      const file = e.target.files?.[0]
+                      if (file) { setLogoFile(file); setLogoPreview(URL.createObjectURL(file)) }
+                    }} className="hidden" />
+                  </label>
+                </div>
+              </div>
               <div className="sm:col-span-2">
                 <label className="mb-1 block text-sm font-medium text-gray-700">Nome Associazione</label>
                 <input type="text" value={form.name} onChange={(e) => set('name', e.target.value)} className={inputClass} />
@@ -250,6 +294,7 @@ export default function SettingsAssociation() {
             {saving ? 'Salvataggio...' : 'Salva Impostazioni'}
           </button>
           {saved && <span className="text-sm text-green-600">Salvato con successo!</span>}
+          {saveError && <span className="text-sm text-red-600">Errore: {saveError}</span>}
         </div>
       </form>
     </div>

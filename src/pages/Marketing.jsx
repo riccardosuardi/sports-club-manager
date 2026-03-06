@@ -16,6 +16,7 @@ const IMPORT_CONTACT_COLUMNS = [
   { header: 'Telefono', field: 'phone' },
   { header: 'Stato', field: 'contact_status' },
   { header: 'Note', field: 'notes' },
+  { header: 'Tipologia', field: 'member_type' },
 ]
 
 const MEMBER_TYPES = [
@@ -153,6 +154,11 @@ export default function Marketing() {
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false)
   const [sortBy, setSortBy] = useState(null) // 'name' | 'contacts' | 'type'
+  const [activities, setActivities] = useState([])
+  const [participants, setParticipants] = useState([])
+  const [filterActivity, setFilterActivity] = useState('')
+  const [showBulkEnroll, setShowBulkEnroll] = useState(false)
+  const [bulkEnrollActivity, setBulkEnrollActivity] = useState('')
   const [sortDir, setSortDir] = useState('asc')
   const searchInputRef = useRef(null)
 
@@ -167,7 +173,7 @@ export default function Marketing() {
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [])
 
-  useEffect(() => { fetchContacts() }, [])
+  useEffect(() => { fetchContacts(); fetchActivities() }, [])
 
   async function fetchContacts() {
     setLoading(true)
@@ -184,6 +190,39 @@ export default function Marketing() {
     } finally {
       setLoading(false)
     }
+  }
+
+  async function fetchActivities() {
+    const [actRes, partRes] = await Promise.all([
+      supabase.from('courses').select('id, name').eq('activity_type', 'marketing').order('name'),
+      supabase.from('activity_participants').select('id, course_id, user_id'),
+    ])
+    setActivities(actRes.data || [])
+    setParticipants(partRes.data || [])
+  }
+
+  function getContactActivities(contactId) {
+    return participants
+      .filter(p => p.user_id === contactId)
+      .map(p => activities.find(a => a.id === p.course_id))
+      .filter(Boolean)
+  }
+
+  async function handleBulkEnroll() {
+    if (!bulkEnrollActivity) return
+    const ids = [...selectedIds]
+    let enrolled = 0
+    for (const userId of ids) {
+      const exists = participants.some(p => p.user_id === userId && p.course_id === bulkEnrollActivity)
+      if (!exists) {
+        const { error } = await supabase.from('activity_participants').insert({ course_id: bulkEnrollActivity, user_id: userId, status: 'attivo' })
+        if (!error) enrolled++
+      }
+    }
+    setShowBulkEnroll(false)
+    setBulkEnrollActivity('')
+    setSelectedIds(new Set())
+    fetchActivities()
   }
 
   async function handleDelete(id) {
@@ -312,7 +351,9 @@ export default function Marketing() {
     const matchesFilter = listFilter === 'tutti' ||
       (listFilter === 'giovani' && c.member_type === 'giovane') ||
       (listFilter === 'genitori' && c.member_type === 'adulto')
-    return matchesSearch && matchesFilter
+    const matchesActivity = !filterActivity ||
+      participants.some(p => p.user_id === c.id && p.course_id === filterActivity)
+    return matchesSearch && matchesFilter && matchesActivity
   }).sort((a, b) => {
     if (!sortBy) return 0
     const dir = sortDir === 'asc' ? 1 : -1
@@ -450,6 +491,16 @@ export default function Marketing() {
               </button>
             ))}
           </div>
+          {activities.length > 0 && (
+            <select
+              value={filterActivity}
+              onChange={(e) => setFilterActivity(e.target.value)}
+              className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600"
+            >
+              <option value="">Tutte le attività</option>
+              {activities.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+            </select>
+          )}
           {listFilter === 'genitori' && (
             <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-600">
               <button
@@ -605,6 +656,41 @@ export default function Marketing() {
                 {t.label}
               </button>
             ))}
+            {activities.length > 0 && (
+              <>
+                <div className="h-4 w-px bg-primary-200" />
+                {showBulkEnroll ? (
+                  <div className="flex items-center gap-1.5">
+                    <select
+                      value={bulkEnrollActivity}
+                      onChange={e => setBulkEnrollActivity(e.target.value)}
+                      className="rounded-md border border-gray-300 px-2 py-1 text-xs"
+                    >
+                      <option value="">Scegli attività…</option>
+                      {activities.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                    </select>
+                    <button
+                      onClick={handleBulkEnroll}
+                      disabled={!bulkEnrollActivity}
+                      className="rounded-md bg-indigo-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-40"
+                    >
+                      Iscrivi
+                    </button>
+                    <button onClick={() => setShowBulkEnroll(false)} className="text-xs text-gray-400 hover:text-gray-600">
+                      <X size={14} />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setShowBulkEnroll(true)}
+                    className="flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium text-indigo-600 hover:bg-indigo-100"
+                  >
+                    <CheckSquare size={14} />
+                    Iscrivi ad attività
+                  </button>
+                )}
+              </>
+            )}
             <div className="h-4 w-px bg-primary-200" />
             <button
               onClick={() => setBulkDeleteConfirm(true)}
@@ -647,6 +733,7 @@ export default function Marketing() {
                   <span className="inline-flex items-center gap-1">Tipologia {sortBy === 'type' && (sortDir === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />)}</span>
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Stato</th>
+                <th className="hidden px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 lg:table-cell">Attività</th>
                 <th className="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500">Azioni</th>
               </tr>
             </thead>
@@ -686,6 +773,13 @@ export default function Marketing() {
                   </td>
                   <td className="whitespace-nowrap px-4 py-3">
                     <StatusChip value={contact.contact_status} onChange={(v) => handleStatusChange(contact.id, v)} />
+                  </td>
+                  <td className="hidden px-4 py-3 lg:table-cell">
+                    <div className="flex flex-wrap gap-1">
+                      {getContactActivities(contact.id).map(a => (
+                        <span key={a.id} className="rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-medium text-indigo-700">{a.name}</span>
+                      ))}
+                    </div>
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-right">
                     <div className="flex justify-end gap-1">
